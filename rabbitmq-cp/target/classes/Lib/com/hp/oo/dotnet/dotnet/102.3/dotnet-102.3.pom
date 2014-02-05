@@ -1,0 +1,189 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<project xmlns="http://maven.apache.org/POM/4.0.0" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 http://maven.apache.org/xsd/maven-4.0.0.xsd">
+    <modelVersion>4.0.0</modelVersion>
+
+    <groupId>com.hp.oo.dotnet</groupId>
+    <artifactId>dotnet</artifactId>
+    <version>102.3</version>
+    <packaging>pom</packaging>
+
+    <scm>
+        <connection>scm:svn:http://mydtbld0026.isr.hp.com:18080/svn/oo/tags/dotnet-102.3</connection>
+    </scm>
+
+    <distributionManagement>
+        <repository>
+            <id>nexus-repository</id>
+            <name>nexus repository</name>
+            <url>http://mydphdb0166.hpswlabs.adapps.hp.com:8081/nexus/content/repositories/releases/</url>
+        </repository>
+        <snapshotRepository>
+            <id>nexus-snapshot-repository</id>
+            <name>nexus snapshots repository</name>
+            <url>http://mydphdb0166.hpswlabs.adapps.hp.com:8081/nexus/content/repositories/snapshots/</url>
+        </snapshotRepository>
+    </distributionManagement>
+
+    <dependencyManagement>
+        <dependencies>
+            <dependency>
+                <groupId>${project.groupId}</groupId>
+                <artifactId>external_dummy</artifactId>
+                <version>${project.version}</version>
+                <type>dll</type>
+            </dependency>
+
+            <dependency>
+                <groupId>${project.groupId}</groupId>
+                <artifactId>oo-dotnet-adapter</artifactId>
+                <version>${project.version}</version>
+                <type>dll</type>
+            </dependency>
+
+            <dependency>
+                <groupId>${project.groupId}</groupId>
+                <artifactId>oo-dotnet-adapter-proxy</artifactId>
+                <version>${project.version}</version>
+                <type>dll</type>
+            </dependency>
+
+            <dependency>
+                <groupId>${project.groupId}</groupId>
+                <artifactId>oo-dotnet-legacy-plugin</artifactId>
+                <version>${project.version}</version>
+                <type>dll</type>
+            </dependency>
+
+            <dependency>
+                <groupId>${project.groupId}</groupId>
+                <artifactId>oo-dotnet-legacy-plugin</artifactId>
+                <version>${project.version}</version>
+                <type>pom</type>
+            </dependency>
+
+            <dependency>
+                <groupId>${project.groupId}</groupId>
+                <artifactId>oo-dotnet-legacy-test-plugin</artifactId>
+                <version>${project.version}</version>
+                <type>dll</type>
+            </dependency>
+
+            <dependency>
+                <groupId>${project.groupId}</groupId>
+                <artifactId>oo-dotnet-plugin-api</artifactId>
+                <version>${project.version}</version>
+                <type>dll</type>
+            </dependency>
+
+            <dependency>
+                <groupId>${project.groupId}</groupId>
+                <artifactId>dotnet</artifactId>
+                <version>${project.version}</version>
+                <type>pom</type>
+            </dependency>
+        </dependencies>
+    </dependencyManagement>
+
+    <build>
+        <sourceDirectory>src/main/csharp</sourceDirectory>
+        <testSourceDirectory>src/test/csharp</testSourceDirectory>
+        <plugins>
+            <plugin>
+                <groupId>org.apache.npanday.plugins</groupId>
+                <artifactId>maven-compile-plugin</artifactId>
+                <version>1.4.0-incubating</version>
+                <extensions>true</extensions>
+                <configuration>
+                    <frameworkVersion>4.0</frameworkVersion>
+                </configuration>
+            </plugin>
+
+            <plugin>
+                <artifactId>maven-antrun-plugin</artifactId>
+                <version>1.7</version>
+                <executions>
+                    <execution>
+                        <id>sign dll</id>
+                        <goals>
+                            <goal>run</goal>
+                        </goals>
+                        <phase>verify</phase>
+                        <configuration>
+                            <target name="code-sign" unless="dont.sign">
+                                <property environment="env" />
+                                <echo>signing dll ${project.build.directory}/${project.artifactId}.dll</echo>
+                                <available property="is.dll.there" file="${project.build.directory}/${project.artifactId}.dll" />
+                                <echo>${is.dll.there}</echo>
+
+                                <taskdef resource="net/sf/antcontrib/antcontrib.properties" />
+
+                                <if>
+                                    <and>
+                                        <available file="${project.build.directory}/${project.artifactId}.dll" />
+                                    </and>
+                                    <then>
+
+                                        <if>
+                                            <isset property="env.HPCSSPATH" />
+                                            <then>
+
+                                                <echo message="HPCSSPATH is set" />
+
+                                                <property name="signed.files.path" value="signed_files" />
+
+                                                <exec executable="cmd">
+                                                    <arg value="/c" />
+                                                    <arg value="HPSign" />
+                                                    <arg value="-r" />
+                                                    <arg value="hpOOwin" />
+                                                    <arg value="-c" />
+                                                    <arg value="C:\codesign\HPCSS\HPSignClient\HPSign.conf" />
+                                                    <arg value="-i" />
+                                                    <arg value="${project.build.directory}/${project.artifactId}.dll" />
+                                                    <arg value="-o" />
+                                                    <arg value="${signed.files.path}" />
+                                                    <arg value="-obj" />
+                                                    <arg value="executable64_batch_sign_local" />
+                                                </exec>
+
+                                                <echo>replacing ${project.artifactId}.dll with the signed version from
+                                                    ${signed.files.path}/${prject.artifactId}.dll
+                                                </echo>
+
+                                                <move file="${signed.files.path}/${project.artifactId}.dll" tofile="${project.build.directory}/${project.artifactId}.dll" overwrite="true" verbose="true" />
+                                            </then>
+                                            <else>
+                                                <echo message="HPCSSPATH is not set - the code sign utility is not installed" />
+                                            </else>
+                                        </if>
+                                    </then>
+                                    <else>
+                                        <echo message="no dll in this project or missing HPCSS installation - skipping code signing" />
+                                    </else>
+                                </if>
+                            </target>
+
+                        </configuration>
+                    </execution>
+                </executions>
+                <dependencies>
+                    <dependency>
+                        <groupId>net.sourceforge.antcontrib</groupId>
+                        <artifactId>ant-contrib</artifactId>
+                        <version>1.0b3</version>
+                    </dependency>
+                </dependencies>
+            </plugin>
+        </plugins>
+    </build>
+
+    <modules>
+        <module>oo-dotnet-plugin-api</module>
+        <module>oo-dotnet-adapter</module>
+        <module>oo-dotnet-adapter-proxy</module>
+        <module>oo-dotnet-legacy-plugin</module>
+        <module>oo-dotnet-legacy-test-plugin</module>
+        <module>external_dummy</module>
+    </modules>
+
+</project>

@@ -1,0 +1,41 @@
+<project xmlns="http://maven.apache.org/POM/4.0.0" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+         xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 http://maven.apache.org/maven-v4_0_0.xsd">
+    <modelVersion>4.0.0</modelVersion>
+    <groupId>net.sf.scannotation</groupId>
+    <artifactId>scannotation</artifactId>
+    <packaging>jar</packaging>
+    <version>1.0.2</version>
+    <name>scannotation</name>
+    <url>http://scannotation.sf.net</url>
+	<description>
+	Scannotation is a Java library that creates an annotation database from a set of .class files
+	</description>
+	<scm>
+	  <connection>scm:svn:https://scannotation.svn.sourceforge.net/svnroot/scannotation/scannotation/</connection>
+	</scm>	
+	<licenses>
+		<license>
+			<name>Apache License V2.0</name>
+			<url>http://www.apache.org/licenses/LICENSE-2.0.txt</url>
+		</license>
+	</licenses>
+    <dependencies>
+        <dependency>
+            <groupId>junit</groupId>
+            <artifactId>junit</artifactId>
+            <version>4.0</version>
+            <scope>test</scope>
+        </dependency>
+        <dependency>
+            <groupId>javassist</groupId>
+            <artifactId>javassist</artifactId>
+            <version>3.6.0.GA</version>
+        </dependency>
+        <dependency>
+            <groupId>javax.servlet</groupId>
+            <artifactId>servlet-api</artifactId>
+            <version>2.5</version>
+            <scope>provided</scope>
+        </dependency>
+    </dependencies>
+</project>

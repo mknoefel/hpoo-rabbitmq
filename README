@@ -1,0 +1,2 @@
+Steps for HP Operations Orchestration to connect to rabbitMQ.
+Please use Apache Maven 3.0.5, higher versions might not work.
