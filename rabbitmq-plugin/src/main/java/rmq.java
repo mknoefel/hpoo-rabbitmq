@@ -8,8 +8,10 @@ import com.hp.oo.sdk.content.plugin.ActionMetadata.MatchType;
 import com.hp.oo.sdk.content.plugin.ActionMetadata.ResponseType;
 
 
+import java.util.Date;
 import java.util.HashMap;
 import java.util.Map;
+import java.text.SimpleDateFormat;
 
 import com.rabbitmq.client.AMQP;
 import com.rabbitmq.client.ConnectionFactory;
@@ -52,25 +54,41 @@ public class rmq {
     								@Param(value = "messageId") String messageId,
     								@Param(value = "priority") String priority,
     								@Param(value = "replyTo") String replyTo,
+    								@Param(value = "dateFormat") String dateFormat,
     								@Param(value = "timeStamp") String timeStamp,
     								@Param(value = "type") String type,
     								@Param(value = "userId") String userId) 
     								 {
         Map<String, String> resultMap = new HashMap<String, String>();
         AMQP.BasicProperties.Builder bob = new AMQP.BasicProperties.Builder();
+                
         
         if (!appId.isEmpty()) bob = bob.appId(appId);
         if (!clusterId.isEmpty()) bob = bob.clusterId(clusterId);
         if (!contentEncoding.isEmpty()) bob = bob.contentEncoding(contentEncoding);
         if (!contentType.isEmpty()) bob = bob.contentType(contentType);
         if (!correlationId.isEmpty()) bob = bob.correlationId(correlationId);
-        // if (!deliveryMode.isEmpty()) bob = bob.deliveryMode(deliveryMode);
+        if (!deliveryMode.isEmpty()) bob = bob.deliveryMode(Integer.parseInt(deliveryMode));
         if (!expiration.isEmpty()) bob = bob.expiration(expiration);
         // if (!headers.isEmpty()) bob = bob.headers(headers);
         if (!messageId.isEmpty()) bob = bob.messageId(messageId);
-        // if (!priority.isEmpty()) bob = bob.priority(priority);
+        if (!priority.isEmpty()) bob = bob.priority(Integer.parseInt(priority));
         if (!replyTo.isEmpty()) bob = bob.replyTo(replyTo);
-        // if (!timeStamp.isEmpty()) bob = bob.timeStamp(timeStamp);
+        if (!timeStamp.isEmpty()) {
+        	try {
+        		Date localTimeStamp = new SimpleDateFormat(dateFormat).parse(timeStamp);
+        		if (!timeStamp.isEmpty()) bob = bob.timestamp(localTimeStamp);
+        	} catch (Exception e) {
+        		try {
+        			Date localTimeStamp = new SimpleDateFormat("yyyy-MM-dd hh:mm:ss").parse(timeStamp);
+        			if (!timeStamp.isEmpty()) bob = bob.timestamp(localTimeStamp);
+        		} catch (Exception f) {
+        			resultMap.put(OutputNames.RETURN_RESULT, "-2");
+        			resultMap.put("resultMessage", "inapproriate timestamp");
+        			return resultMap;
+        		}
+        	}
+        }
         if (!type.isEmpty()) bob = bob.type(type);
         if (!userId.isEmpty()) bob = bob.userId(userId);
         
@@ -131,7 +149,8 @@ public class rmq {
                     @Output("isRedeliver")
             },
             responses = {
-                    @Response(text = ResponseNames.SUCCESS, field = OutputNames.RETURN_RESULT, value = "0", matchType = MatchType.COMPARE_GREATER_OR_EQUAL, responseType = ResponseType.RESOLVED),
+                    @Response(text = "Message Received", field = OutputNames.RETURN_RESULT, value = "0", matchType = MatchType.COMPARE_GREATER, responseType = ResponseType.RESOLVED),
+                    @Response(text = "no message available", field = OutputNames.RETURN_RESULT, value = "0", matchType = MatchType.COMPARE_EQUAL, responseType = ResponseType.RESOLVED),
                     @Response(text = ResponseNames.FAILURE, field = OutputNames.RETURN_RESULT, value = "0", matchType = MatchType.COMPARE_LESS, responseType = ResponseType.ERROR)
 			})
 	
@@ -143,8 +162,9 @@ public class rmq {
     									@Param(value = "queueName", required = true) String queueName,
     									@Param(value = "autoAck") String autoAck) {
         Map<String, String> resultMap = new HashMap<String, String>();
-        String message;
+        String message = null;
         Envelope envelope = new Envelope(0, true, "", "");
+        AMQP.BasicProperties props = new AMQP.BasicProperties();
          
         try {
         	ConnectionFactory factory = new ConnectionFactory();
@@ -154,27 +174,51 @@ public class rmq {
         	Channel channel = connection.createChannel();
         	
         	boolean localAutoAck = false;
-        	if (autoAck.equalsIgnoreCase("true")) localAutoAck = true;
+        	if (autoAck.equalsIgnoreCase("true".trim())) localAutoAck = true;
 
         	QueueingConsumer consumer = new QueueingConsumer(channel);
+        	
         	channel.basicConsume(queueName, localAutoAck, consumer);
         	
-            QueueingConsumer.Delivery delivery = consumer.nextDelivery(1000);
-            message = new String(delivery.getBody());
-            envelope = delivery.getEnvelope();
+        	QueueingConsumer.Delivery delivery = consumer.nextDelivery(1000);
+        	        	
+        	try {
+        		message = new String(delivery.getBody());
+        	} catch (Exception e) {
+        		resultMap.put(OutputNames.RETURN_RESULT, "0");
+            	resultMap.put("resultMessage", "no message available");
+            	return resultMap;
+        	}
+        	
+        	envelope = delivery.getEnvelope();
+        	props = delivery.getProperties();
             
         } catch (Exception e) {
         	resultMap.put(OutputNames.RETURN_RESULT, "-1");
-        	resultMap.put("resultMessage", "could not get message");
+        	resultMap.put("resultMessage", "an error occured while reading message");
         	return resultMap;
         }
         
-        resultMap.put(OutputNames.RETURN_RESULT, "0");
+        resultMap.put(OutputNames.RETURN_RESULT, "1");
         resultMap.put("message", message);
         resultMap.put("deliveryTag", Long.toString(envelope.getDeliveryTag()));
         resultMap.put("exchange", envelope.getExchange());
         resultMap.put("routingKey", envelope.getRoutingKey());
         resultMap.put("isRedeliver", Boolean.toString(envelope.isRedeliver()));
+        resultMap.put("appId", props.getAppId());
+        resultMap.put("clusterId", props.getClusterId());
+        resultMap.put("contentEncoding", props.getContentEncoding());
+        resultMap.put("contentType", props.getContentType());
+        resultMap.put("correlationId", props.getCorrelationId());
+        // resultMap.put("deliveryMode", Integer.toString(props.getDeliveryMode()));
+        resultMap.put("expiration", props.getExpiration());
+        // resultMap.put("headers");
+        resultMap.put("messageId", props.getMessageId());
+        // resultMap.put("priority", props.getPriority().toString());
+        resultMap.put("replyTo", props.getReplyTo());
+		// resultMap.put("timeStamp", props.getTimestamp().toString());
+		resultMap.put("type", props.getType());
+		resultMap.put("userId", props.getUserId()); 
         
         return resultMap;
 	}

@@ -24,13 +24,13 @@ public class rmqTest {
 		Map<String, String> mqMessage = new HashMap<String, String>();
 		
 		// q.send(message, mqHost, port, user, pass, virtualHost, exchange, queue)
-		q.send("myMessage", "localhost", "", "", "", "", "", "junit",
-				"", "", "", "", "", "", "", "", "", "", "", "", "", "");
+		q.send("myMessage", "localhost", "", "oo", "Test1234", "ooHost", "", "junit",
+				"", "", "", "", "", "", "", "", "", "", "", "dd.MM.yyyy", "", "", "");
 				
-		mqMessage = q.retrieve("localhost", "", "", "", "", "junit", "true");
+		mqMessage = q.retrieve("localhost", "", "oo", "Test1234", "ooHost", "junit", "true");
 		String mesg = getValueFromMap(mqMessage, "message");
 		
 		assertTrue("sending or retrieving message failed", "myMessage".equalsIgnoreCase(mesg));
 	}
-
+	
 }
