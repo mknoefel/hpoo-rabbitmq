@@ -8,26 +8,28 @@ import org.junit.Test;
 
 public class rmqTest {
 
+	public String getValueFromMap(Map<String, String> map, String value) {
+		for (Map.Entry<String, String> entry: map.entrySet()) {
+			if (value.equals(entry.getKey())) {
+				return entry.getValue();
+			}
+		}
+		return null;
+	}
+	
+	
 	@Test
 	public void test() {
 		rmq q = new rmq();
 		Map<String, String> mqMessage = new HashMap<String, String>();
 		
 		// q.send(mqHost, port, user, pass, virtualHost, queue, message)
-		q.send("localhost", "", "", "", "", "junit", "message");
+		q.send("localhost", "", "", "", "", "junit", "myMessage");
 				
 		mqMessage = q.retrieve("localhost", "", "", "", "", "junit");
-		String mesg = new String();
+		String mesg = getValueFromMap(mqMessage, "message");
 		
-		for (Map.Entry<String, String> entry: mqMessage.entrySet()) {
-			System.out.printf("key: %s, value <%s>\n", 
-					entry.getKey().toString(), 
-					entry.getValue().toString());
-			if ("message".equals(entry.getKey())) {
-				mesg = entry.getValue().toString();
-			}
-		}
-		assertTrue("sending or retrieving message failed", "message".equalsIgnoreCase(mesg));
+		assertTrue("sending or retrieving message failed", "myMessage".equalsIgnoreCase(mesg));
 	}
 
 }

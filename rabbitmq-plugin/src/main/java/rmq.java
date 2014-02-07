@@ -25,23 +25,21 @@ public class rmq {
             description = "sends a message with RabbitMQ",
             outputs = {
                     @Output(OutputNames.RETURN_RESULT),
-                    @Output("result_message")
+                    @Output("resultMessage")
             },
             responses = {
                     @Response(text = ResponseNames.SUCCESS, field = OutputNames.RETURN_RESULT, value = "0", matchType = MatchType.COMPARE_GREATER_OR_EQUAL, responseType = ResponseType.RESOLVED),
                     @Response(text = ResponseNames.FAILURE, field = OutputNames.RETURN_RESULT, value = "0", matchType = MatchType.COMPARE_LESS, responseType = ResponseType.ERROR)
 			})
 	
-    public Map<String, String> send(@Param(value = "mqHost", required = true, description = "fqdn name or ip address of the rabbitmq host") String mqHost,
+    public Map<String, String> send(@Param(value = "mqHost", required = true) String mqHost,
     								@Param(value = "mqPort") String mqPortString,
     								@Param(value = "username") String username,
-    								@Param(value = "password") String password,
+    								@Param(value = "password", encrypted = true) String password,
     								@Param(value = "virtualHost") String virtualHost,
-    								
-    								@Param(value = "queueName") String queueName, 
+    								@Param(value = "queueName", required = true) String queueName, 
     								@Param(value = "message") String message) {
         Map<String, String> resultMap = new HashMap<String, String>();
-        int returnVal = 0;
         
         ConnectionFactory factory = new ConnectionFactory();
         setFactory(factory, mqHost, mqPortString, username, password, virtualHost);
@@ -50,26 +48,19 @@ public class rmq {
         	Connection connection = factory.newConnection();
         	Channel channel = connection.createChannel();
         	
-        	channel.queueDeclare(queueName, false, false, false, null);
             channel.basicPublish("", queueName, null, message.getBytes());
             
             channel.close();
             connection.close();
         } catch (Exception e) {
-        	System.err.println("connection to RabbitMQ could not be established");
-        	returnVal = -1;
+        	resultMap.put(OutputNames.RETURN_RESULT, "-1");
+        	resultMap.put("resultMessage", "message not sent");
+        	return resultMap;
         }
         
         //The "result" output
-        resultMap.put(OutputNames.RETURN_RESULT, String.valueOf(returnVal));
-
-        //The "result_message" output
-        if (returnVal >= 0) {
-            resultMap.put("result_message", "message sent");
-        } else {
-            resultMap.put("result_message", "message not sent");
-        }
-        
+        resultMap.put(OutputNames.RETURN_RESULT, "0");
+        resultMap.put("resultMessage", "message sent");
         return resultMap;
 	}
 	
@@ -79,26 +70,26 @@ public class rmq {
             description = "retrieves a message from RabbitMQ",
             outputs = {
                     @Output(OutputNames.RETURN_RESULT),
+                    @Output("returnMessage"),
                     @Output("message"),
-                    @Output("envelopeTag"),
-                    @Output("envelopeExchange"),
-                    @Output("envelopeRoutingKey"),
-                    @Output("envelopeIsRedeliver")
+                    @Output("tag"),
+                    @Output("exchange"),
+                    @Output("routingKey"),
+                    @Output("isRedeliver")
             },
             responses = {
                     @Response(text = ResponseNames.SUCCESS, field = OutputNames.RETURN_RESULT, value = "0", matchType = MatchType.COMPARE_GREATER_OR_EQUAL, responseType = ResponseType.RESOLVED),
                     @Response(text = ResponseNames.FAILURE, field = OutputNames.RETURN_RESULT, value = "0", matchType = MatchType.COMPARE_LESS, responseType = ResponseType.ERROR)
 			})
 	
-    public Map<String, String> retrieve(@Param(value = "mqHost", required = true, description = "fqdn name or ip address of the rabbitmq host") String mqHost,
+    public Map<String, String> retrieve(@Param(value = "mqHost", required = true) String mqHost,
     									@Param(value = "mqPort") String mqPortString,
     									@Param(value = "username") String username,
     									@Param(value = "password", encrypted = true) String password,
-    									@Param(value = "virtualHost", description = "defaults to '/'") String virtualHost,
+    									@Param(value = "virtualHost") String virtualHost,
     									@Param(value = "queueName", required = true) String queueName) {
         Map<String, String> resultMap = new HashMap<String, String>();
-        int returnVal = 0;
-        String message = "";
+        String message;
         Envelope envelope = new Envelope(0, true, "", "");
          
         try {
@@ -108,22 +99,21 @@ public class rmq {
         	Connection connection = factory.newConnection();
         	Channel channel = connection.createChannel();
 
-        	channel.queueDeclare(queueName, false, false, false, null);
-        	
         	QueueingConsumer consumer = new QueueingConsumer(channel);
         	channel.basicConsume(queueName, true, consumer);
         	
-            QueueingConsumer.Delivery delivery = consumer.nextDelivery();
+            QueueingConsumer.Delivery delivery = consumer.nextDelivery(1000);
             message = new String(delivery.getBody());
             envelope = delivery.getEnvelope();
             
         } catch (Exception e) {
-        	System.err.println("connection to RabbitMQ could not be established");
-        	returnVal = -1;
+        	resultMap.put(OutputNames.RETURN_RESULT, "-1");
+        	resultMap.put("resultMessage", "could not get message");
+        	return resultMap;
         }
         
         //The "result" output
-        resultMap.put(OutputNames.RETURN_RESULT, String.valueOf(returnVal));
+        resultMap.put(OutputNames.RETURN_RESULT, "0");
 
         //The "result_message" output
         resultMap.put("message", message);
