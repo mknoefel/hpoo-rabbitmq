@@ -34,8 +34,7 @@ public class rmq {
                     @Response(text = ResponseNames.SUCCESS, field = OutputNames.RETURN_RESULT, value = "0", matchType = MatchType.COMPARE_GREATER_OR_EQUAL, responseType = ResponseType.RESOLVED),
                     @Response(text = ResponseNames.FAILURE, field = OutputNames.RETURN_RESULT, value = "0", matchType = MatchType.COMPARE_LESS, responseType = ResponseType.ERROR)
 			})
-	
-    public Map<String, String> send(@Param(value = "message") String message,
+	public Map<String, String> send(@Param(value = "message") String message,
     								@Param(value = "mqHost", required = true) String mqHost,
     								@Param(value = "mqPort") String mqPortString,
     								@Param(value = "username") String username,
@@ -61,27 +60,28 @@ public class rmq {
     								 {
         Map<String, String> resultMap = new HashMap<String, String>();
         AMQP.BasicProperties.Builder bob = new AMQP.BasicProperties.Builder();
-                
+        AMQP.BasicProperties props = null;
+        ConnectionFactory factory = new ConnectionFactory();
         
-        if (!appId.isEmpty()) bob = bob.appId(appId);
-        if (!clusterId.isEmpty()) bob = bob.clusterId(clusterId);
-        if (!contentEncoding.isEmpty()) bob = bob.contentEncoding(contentEncoding);
-        if (!contentType.isEmpty()) bob = bob.contentType(contentType);
-        if (!correlationId.isEmpty()) bob = bob.correlationId(correlationId);
-        if (!deliveryMode.isEmpty()) bob = bob.deliveryMode(Integer.parseInt(deliveryMode));
-        if (!expiration.isEmpty()) bob = bob.expiration(expiration);
-        // if (!headers.isEmpty()) bob = bob.headers(headers);
-        if (!messageId.isEmpty()) bob = bob.messageId(messageId);
-        if (!priority.isEmpty()) bob = bob.priority(Integer.parseInt(priority));
-        if (!replyTo.isEmpty()) bob = bob.replyTo(replyTo);
-        if (!timeStamp.isEmpty()) {
+        if (appId != null && !appId.isEmpty()) bob = bob.appId(appId);
+        if (clusterId != null && !clusterId.isEmpty()) bob = bob.clusterId(clusterId);
+        if (contentEncoding != null && !contentEncoding.isEmpty()) bob = bob.contentEncoding(contentEncoding);
+        if (contentType != null && !contentType.isEmpty()) bob = bob.contentType(contentType);
+        if (correlationId != null && !correlationId.isEmpty()) bob = bob.correlationId(correlationId);
+        if (deliveryMode != null && !deliveryMode.isEmpty()) bob = bob.deliveryMode(Integer.parseInt(deliveryMode));
+        if (expiration != null && !expiration.isEmpty()) bob = bob.expiration(expiration);
+        // if (headers != null) bob = bob.headers(headers);
+        if (messageId != null && !messageId.isEmpty()) bob = bob.messageId(messageId);
+        if (priority != null && !priority.isEmpty()) bob = bob.priority(Integer.parseInt(priority));
+        if (replyTo != null && !replyTo.isEmpty()) bob = bob.replyTo(replyTo);
+        if (timeStamp != null && !timeStamp.isEmpty()) {
         	try {
         		Date localTimeStamp = new SimpleDateFormat(dateFormat).parse(timeStamp);
-        		if (!timeStamp.isEmpty()) bob = bob.timestamp(localTimeStamp);
+        		if (timeStamp != null) bob = bob.timestamp(localTimeStamp);
         	} catch (Exception e) {
         		try {
         			Date localTimeStamp = new SimpleDateFormat("yyyy-MM-dd hh:mm:ss").parse(timeStamp);
-        			if (!timeStamp.isEmpty()) bob = bob.timestamp(localTimeStamp);
+        			if (timeStamp != null) bob = bob.timestamp(localTimeStamp);
         		} catch (Exception f) {
         			resultMap.put(OutputNames.RETURN_RESULT, "-2");
         			resultMap.put("resultMessage", "inapproriate timestamp");
@@ -89,19 +89,39 @@ public class rmq {
         		}
         	}
         }
-        if (!type.isEmpty()) bob = bob.type(type);
-        if (!userId.isEmpty()) bob = bob.userId(userId);
+        	
+        if (type != null && !type.isEmpty()) bob = bob.type(type);
+        if (userId != null && !userId.isEmpty()) bob = bob.userId(userId);
         
-        AMQP.BasicProperties props = bob.build();
+        props = bob.build();
         
-        ConnectionFactory factory = new ConnectionFactory();
-        setFactory(factory, mqHost, mqPortString, username, password, virtualHost);
+        factory.setHost(mqHost);
+		
+        if (message == null) message = new String("");
+        if (exchange == null) exchange = new String("");
+        
+		if (mqPortString != null && !mqPortString.isEmpty() && Integer.parseInt(mqPortString) > 0) {
+        	factory.setPort(Integer.parseInt(mqPortString));
+        } else {
+        	factory.setPort(5672);
+        }
+		
+		if (username != null && !username.isEmpty()) {
+			factory.setUsername(username);
+			if (password != null && !password.isEmpty()) {
+				factory.setPassword(password);
+			}
+		}
+        
+		if (virtualHost != null && !virtualHost.isEmpty()) {
+			factory.setVirtualHost(virtualHost);
+		}
         
         try {
         	Connection connection = factory.newConnection();
         	Channel channel = connection.createChannel();
         	
-            channel.basicPublish(exchange, queueName, props, message.getBytes());
+        	channel.basicPublish(exchange, queueName, props, message.getBytes());
             
             channel.close();
             connection.close();
@@ -134,11 +154,13 @@ public class rmq {
             			"with an accoring step.\n" +
             		"\nOutputs\n:" +
             		"message: the message retrieved from the queue\n" +
+            		"The next 4 outputs represent the message envelope\n" +
             		"deliveryTag: the delivery tag from message envelope\n" +
             		"exchange: exchange from envelope\n" +
             		"routingKey: routingKey from envelope\n" +
             		"isRedilver: is the message redeliverd (causes for redelivery could be that the original " +
-            			"cosumer was not available and another cosumer was chosen by rabbitMQ\n",
+            		"cosumer was not available and another cosumer was chosen by rabbitMQ\n" +
+            		"The next outputs represent the message properties",
             outputs = {
                     @Output(OutputNames.RETURN_RESULT),
                     @Output("returnMessage"),
@@ -146,15 +168,25 @@ public class rmq {
                     @Output("deliveryTag"),
                     @Output("exchange"),
                     @Output("routingKey"),
-                    @Output("isRedeliver")
+                    @Output("isRedeliver"),
+                    @Output("appId"), 
+                    @Output("clusterId"),
+                    @Output("contentEncoding"),
+                    @Output("contentType"),
+                    @Output("correlationId"),
+                    @Output("expiration"),
+                    @Output("messageId"),
+                    @Output("replyTo"),
+                    @Output("type"),
+                    @Output("userId")
             },
             responses = {
                     @Response(text = "Message Received", field = OutputNames.RETURN_RESULT, value = "0", matchType = MatchType.COMPARE_GREATER, responseType = ResponseType.RESOLVED),
-                    @Response(text = "no message available", field = OutputNames.RETURN_RESULT, value = "0", matchType = MatchType.COMPARE_EQUAL, responseType = ResponseType.RESOLVED),
+                    @Response(text = "no message available", field = OutputNames.RETURN_RESULT, value = "0", matchType = MatchType.COMPARE_EQUAL, responseType = ResponseType.NO_ACTION_TAKEN),
                     @Response(text = ResponseNames.FAILURE, field = OutputNames.RETURN_RESULT, value = "0", matchType = MatchType.COMPARE_LESS, responseType = ResponseType.ERROR)
 			})
 	
-    public Map<String, String> retrieve(@Param(value = "mqHost", required = true) String mqHost,
+	public Map<String, String> retrieve(@Param(value = "mqHost", required = true) String mqHost,
     									@Param(value = "mqPort") String mqPortString,
     									@Param(value = "username") String username,
     									@Param(value = "password", encrypted = true) String password,
@@ -165,11 +197,27 @@ public class rmq {
         String message = null;
         Envelope envelope = new Envelope(0, true, "", "");
         AMQP.BasicProperties props = new AMQP.BasicProperties();
-         
+        ConnectionFactory factory = new ConnectionFactory();
+        
+        factory.setHost(mqHost);
+		
+		if (mqPortString != null && !mqPortString.isEmpty() && Integer.parseInt(mqPortString) > 0) {
+        	factory.setPort(Integer.parseInt(mqPortString));
+        } else {
+        	factory.setPort(5672);
+        }
+		
+		if (username != null && !username.isEmpty()) {
+			factory.setUsername(username);
+			if (password != null && !password.isEmpty()) {
+				factory.setPassword(password);
+			}
+		}
+        
+		if (virtualHost != null && !virtualHost.isEmpty()) {
+			factory.setVirtualHost(virtualHost);
+		}
         try {
-        	ConnectionFactory factory = new ConnectionFactory();
-        	setFactory(factory, mqHost, mqPortString, username, password, virtualHost);
-        	
         	Connection connection = factory.newConnection();
         	Channel channel = connection.createChannel();
         	
@@ -185,13 +233,19 @@ public class rmq {
         	try {
         		message = new String(delivery.getBody());
         	} catch (Exception e) {
+        		channel.close();
+            	connection.close();
+        		
         		resultMap.put(OutputNames.RETURN_RESULT, "0");
-            	resultMap.put("resultMessage", "no message available");
+            	resultMap.put("resultMessage", "no message available: "+e.getMessage());
             	return resultMap;
         	}
         	
         	envelope = delivery.getEnvelope();
         	props = delivery.getProperties();
+        	
+        	channel.close();
+        	connection.close();
             
         } catch (Exception e) {
         	resultMap.put(OutputNames.RETURN_RESULT, "-1");
@@ -200,6 +254,7 @@ public class rmq {
         }
         
         resultMap.put(OutputNames.RETURN_RESULT, "1");
+        resultMap.put("resultMessage", "message retrieved");
         resultMap.put("message", message);
         resultMap.put("deliveryTag", Long.toString(envelope.getDeliveryTag()));
         resultMap.put("exchange", envelope.getExchange());
@@ -223,39 +278,4 @@ public class rmq {
         return resultMap;
 	}
 	
-	/**
-	 * setFactory sets all parameters if they are given
-	 * @param factory
-	 * @param mqHost
-	 * @param mqPortString
-	 * @param username
-	 * @param password
-	 * @param virtualHost
-	 */
-	void setFactory(ConnectionFactory factory,
-					String mqHost,
-					String mqPortString,
-					String username,
-					String password,
-					String virtualHost			
-				) {
-		factory.setHost(mqHost);
-		
-		if (!mqPortString.isEmpty() && Integer.parseInt(mqPortString) > 0) {
-        	factory.setPort(Integer.parseInt(mqPortString));
-        } else {
-        	factory.setPort(5672);
-        }
-		
-		if (!username.isEmpty()) {
-			factory.setUsername(username);
-			if (!password.isEmpty()) {
-				factory.setPassword(password);
-			}
-		}
-        
-		if (!virtualHost.isEmpty()) {
-			factory.setVirtualHost(virtualHost);
-		}
-	}
 }

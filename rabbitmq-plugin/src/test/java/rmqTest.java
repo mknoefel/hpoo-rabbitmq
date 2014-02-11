@@ -21,16 +21,26 @@ public class rmqTest {
 	@Test
 	public void test() {
 		rmq q = new rmq();
-		Map<String, String> mqMessage = new HashMap<String, String>();
+		Map<String, String> rMesg = new HashMap<String, String>();
+		Map<String, String> sMesg = new HashMap<String, String>();
 		
 		// q.send(message, mqHost, port, user, pass, virtualHost, exchange, queue)
-		q.send("myMessage", "localhost", "", "oo", "Test1234", "ooHost", "", "junit",
-				"", "", "", "", "", "", "", "", "", "", "", "dd.MM.yyyy", "", "", "");
-				
-		mqMessage = q.retrieve("localhost", "", "oo", "Test1234", "ooHost", "junit", "true");
-		String mesg = getValueFromMap(mqMessage, "message");
+		sMesg = q.send("myMessage", "127.0.0.1", "5672", "oo", "Test1234", "ooHost", "amq.rabbitmq.trace", "junit",
+				"", "", "", "text/plain", "", "", "", "", "", "", "", "dd.MM.yyyy", "", "", "");
 		
-		assertTrue("sending or retrieving message failed", "myMessage".equalsIgnoreCase(mesg));
+		assertTrue("return message wrong", 
+				getValueFromMap(sMesg, "resultMessage").equals("message sent"));
+				
+		rMesg = q.retrieve("127.0.0.1", "5672", "oo", "Test1234", "ooHost", "junit", "true");
+		
+		assertFalse(getValueFromMap(rMesg, "resultMessage"),
+				getValueFromMap(rMesg, "resultMessage").contains("no message available"));
+		
+		assertTrue("wrong result message",
+				getValueFromMap(rMesg, "resultMessage").equals("message retrieved"));
+		
+		assertTrue("sending or retrieving message failed", 
+				getValueFromMap(rMesg, "message").equals("myMessage"));
 	}
 	
 }
