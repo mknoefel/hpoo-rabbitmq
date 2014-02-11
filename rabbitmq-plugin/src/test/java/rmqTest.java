@@ -31,7 +31,7 @@ public class rmqTest {
 		assertTrue("return message wrong", 
 				getValueFromMap(sMesg, "resultMessage").equals("message sent"));
 				
-		rMesg = q.retrieve("127.0.0.1", "5672", "oo", "Test1234", "ooHost", "junit", "true");
+		rMesg = q.retrieve("127.0.0.1", "5672", "oo", "Test1234", "ooHost", "junit", "true", "");
 		
 		assertFalse(getValueFromMap(rMesg, "resultMessage"),
 				getValueFromMap(rMesg, "resultMessage").contains("no message available"));
