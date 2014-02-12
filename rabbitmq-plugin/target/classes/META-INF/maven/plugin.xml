@@ -4,7 +4,7 @@
   <description></description>
   <groupId>de.knoefel-ffm</groupId>
   <artifactId>rabbitmq-plugin</artifactId>
-  <version>1.0.4.13</version>
+  <version>1.0.4.18</version>
   <goalPrefix>rabbitmq</goalPrefix>
   <isolatedRealm>false</isolatedRealm>
   <inheritedByDefault>true</inheritedByDefault>
@@ -35,6 +35,47 @@
       <configuration>
         <session implementation="org.apache.maven.execution.MavenSession">${session}</session>
       </configuration>
+    </mojo>
+    <mojo>
+      <goal>execute</goal>
+      <description></description>
+      <requiresDirectInvocation>false</requiresDirectInvocation>
+      <requiresProject>false</requiresProject>
+      <requiresReports>false</requiresReports>
+      <aggregator>false</aggregator>
+      <requiresOnline>false</requiresOnline>
+      <inheritedByDefault>true</inheritedByDefault>
+      <implementation>GeneratedActionPlugin</implementation>
+      <language>java</language>
+      <instantiationStrategy>per-lookup</instantiationStrategy>
+      <executionStrategy>once-per-session</executionStrategy>
+      <threadSafe>false</threadSafe>
+      <parameters>
+        <parameter>
+          <name>actionName</name>
+          <type>java.lang.String</type>
+          <required>true</required>
+          <editable>false</editable>
+          <description></description>
+        </parameter>
+        <parameter>
+          <name>session</name>
+          <type>org.apache.maven.execution.MavenSession</type>
+          <required>true</required>
+          <editable>false</editable>
+          <description></description>
+        </parameter>
+      </parameters>
+      <configuration>
+        <actionName implementation="java.lang.String">${action}</actionName>
+        <session implementation="org.apache.maven.execution.MavenSession">${session}</session>
+      </configuration>
+      <requirements>
+        <requirement>
+          <role>org.codehaus.plexus.PlexusContainer</role>
+          <field-name>container</field-name>
+        </requirement>
+      </requirements>
     </mojo>
     <mojo>
       <goal>action-metadata</goal>
@@ -97,47 +138,6 @@
       <configuration>
         <session implementation="org.apache.maven.execution.MavenSession">${session}</session>
       </configuration>
-    </mojo>
-    <mojo>
-      <goal>execute</goal>
-      <description></description>
-      <requiresDirectInvocation>false</requiresDirectInvocation>
-      <requiresProject>false</requiresProject>
-      <requiresReports>false</requiresReports>
-      <aggregator>false</aggregator>
-      <requiresOnline>false</requiresOnline>
-      <inheritedByDefault>true</inheritedByDefault>
-      <implementation>GeneratedActionPlugin</implementation>
-      <language>java</language>
-      <instantiationStrategy>per-lookup</instantiationStrategy>
-      <executionStrategy>once-per-session</executionStrategy>
-      <threadSafe>false</threadSafe>
-      <parameters>
-        <parameter>
-          <name>actionName</name>
-          <type>java.lang.String</type>
-          <required>true</required>
-          <editable>false</editable>
-          <description></description>
-        </parameter>
-        <parameter>
-          <name>session</name>
-          <type>org.apache.maven.execution.MavenSession</type>
-          <required>true</required>
-          <editable>false</editable>
-          <description></description>
-        </parameter>
-      </parameters>
-      <configuration>
-        <actionName implementation="java.lang.String">${action}</actionName>
-        <session implementation="org.apache.maven.execution.MavenSession">${session}</session>
-      </configuration>
-      <requirements>
-        <requirement>
-          <role>org.codehaus.plexus.PlexusContainer</role>
-          <field-name>container</field-name>
-        </requirement>
-      </requirements>
     </mojo>
   </mojos>
   <dependencies>

@@ -7,12 +7,6 @@ import com.hp.oo.sdk.content.constants.ResponseNames;
 import com.hp.oo.sdk.content.plugin.ActionMetadata.MatchType;
 import com.hp.oo.sdk.content.plugin.ActionMetadata.ResponseType;
 
-
-import java.util.Date;
-import java.util.HashMap;
-import java.util.Map;
-import java.text.SimpleDateFormat;
-
 import com.rabbitmq.client.AMQP;
 import com.rabbitmq.client.ConnectionFactory;
 import com.rabbitmq.client.Connection;
@@ -21,12 +15,36 @@ import com.rabbitmq.client.Envelope;
 import com.rabbitmq.client.GetResponse;
 import com.rabbitmq.tools.json.JSONReader;
 
+import java.util.Calendar;
+import java.util.Date;
+import java.util.HashMap;
+import java.util.Map;
+import java.text.SimpleDateFormat;
+
 public class rmq {
 
 	
 	
+	@SuppressWarnings("unchecked")
 	@Action(name = "send message",
-            description = "sends a message with RabbitMQ",
+            description = "sends a message with RabbitMQ\n" +
+            		"\nInputs:\n" +
+            		"message: the message to send\n" +
+            		"mqHost: FQDN or ip address of the rabbitMQ host\n" +
+            		"mqPort: port number of the rabbitMQ host" +
+            		"username: to log in to rabbitMQ resp. to virtual host\n" +
+            		"password: the password for the given user\n" +
+            		"virtualHost: rabbitMQ's virtual host\n" +
+            		"exchange: exchange to use\n" +
+            		"queueName: the name of the queue\n" +
+            		"\nEverything that follows now builds the message properties.\n" +
+            		"headers: input is a json text with strings, booleans, and integers only " +
+            		"(i.e. {\"name\":\"my name\", \"feeling great\": true, \"day of XMAS\": 24)\n" +
+            		"timestamp can use the keyword \"now\" to request the current date to be inserted\n" +
+            		"dateFormat can be used to describe the format for timestamp " +
+            		"(see http://docs.oracle.com/javase/7/docs/api/java/text/SimpleDateFormat.html)\n" +
+            		"\nOutputs:\n" +
+            		"\nresultMessage: indicates success or failure reason.",
             outputs = {
                     @Output(OutputNames.RETURN_RESULT),
                     @Output("resultMessage")
@@ -64,6 +82,11 @@ public class rmq {
         AMQP.BasicProperties props = null;
         ConnectionFactory factory = new ConnectionFactory();
         
+        /*
+         * getting the string from OO we need to check if they are null. Null strings will not
+         * work in the code.
+         */
+        
         if (appId != null && !appId.isEmpty()) bob = bob.appId(appId);
         if (clusterId != null && !clusterId.isEmpty()) bob = bob.clusterId(clusterId);
         if (contentEncoding != null && !contentEncoding.isEmpty()) bob = bob.contentEncoding(contentEncoding);
@@ -71,22 +94,59 @@ public class rmq {
         if (correlationId != null && !correlationId.isEmpty()) bob = bob.correlationId(correlationId);
         if (deliveryMode != null && !deliveryMode.isEmpty()) bob = bob.deliveryMode(Integer.parseInt(deliveryMode));
         if (expiration != null && !expiration.isEmpty()) bob = bob.expiration(expiration);
-        // if (headers != null) bob = bob.headers(JSONReader.read(headers));
+        if (headers != null && !headers.isEmpty()) try {
+        	Map<String,Object> jason = new HashMap<String,Object>();
+        	Map<String,Object> localHeaders = new HashMap<String,Object>();
+        	
+    		JSONReader rdr = new JSONReader();
+    		jason = (Map<String, Object>) rdr.read(headers);
+    		
+    		for (Map.Entry<String, Object> entry: jason.entrySet()) {
+    			String key = entry.getKey();
+    			
+    			if (entry.getValue().getClass().toString().equals("class java.lang.Integer")) {
+    				Integer value = (Integer) entry.getValue();
+    				localHeaders.put(key, value);
+    			}
+    			
+    			if (entry.getValue().getClass().toString().equals("class java.lang.Boolean")) {
+    				Boolean value = (Boolean) entry.getValue();
+    				localHeaders.put(key, value);
+    			}
+    			
+    			if (entry.getValue().getClass().toString().equals("class java.lang.String")) {
+    				String value = (String) entry.getValue();
+    				localHeaders.put(key, value);
+    			}
+    		}
+        	bob = bob.headers(localHeaders);
+        } catch (Exception e) {
+        	resultMap.put(OutputNames.RETURN_RESULT, "-3");
+            resultMap.put("resultMessage", "could not read headers");
+            return resultMap;
+        }
         if (messageId != null && !messageId.isEmpty()) bob = bob.messageId(messageId);
         if (priority != null && !priority.isEmpty()) bob = bob.priority(Integer.parseInt(priority));
         if (replyTo != null && !replyTo.isEmpty()) bob = bob.replyTo(replyTo);
         if (timeStamp != null && !timeStamp.isEmpty()) {
-        	try {
-        		Date localTimeStamp = new SimpleDateFormat(dateFormat).parse(timeStamp);
-        		if (timeStamp != null) bob = bob.timestamp(localTimeStamp);
-        	} catch (Exception e) {
+        	
+        	if ("now".equals(timeStamp.trim())) {
+        		Calendar cal = Calendar.getInstance();  
+        		Date now = cal.getTime();
+        		bob.timestamp(now);
+        	} else { 
         		try {
-        			Date localTimeStamp = new SimpleDateFormat("yyyy-MM-dd hh:mm:ss").parse(timeStamp);
+        			Date localTimeStamp = new SimpleDateFormat(dateFormat).parse(timeStamp);
         			if (timeStamp != null) bob = bob.timestamp(localTimeStamp);
-        		} catch (Exception f) {
-        			resultMap.put(OutputNames.RETURN_RESULT, "-2");
-        			resultMap.put("resultMessage", "inapproriate timestamp");
-        			return resultMap;
+        		} catch (Exception e) {
+        			try {
+        				Date localTimeStamp = new SimpleDateFormat("yyyy-MM-dd hh:mm:ss").parse(timeStamp);
+        				if (timeStamp != null) bob = bob.timestamp(localTimeStamp);
+        			} catch (Exception f) {
+        				resultMap.put(OutputNames.RETURN_RESULT, "-2");
+        				resultMap.put("resultMessage", "inapproriate timestamp");
+        				return resultMap;
+        			}
         		}
         	}
         }
@@ -118,6 +178,9 @@ public class rmq {
 			factory.setVirtualHost(virtualHost);
 		}
         
+		/*
+		 * here we send the message
+		 */
         try {
         	Connection connection = factory.newConnection();
         	Channel channel = connection.createChannel();
@@ -150,10 +213,10 @@ public class rmq {
             		"virtualHost: rabbitMQ's virtual host\n" +
             		"queueName: the name of the queue\n" +
             		"autoAck: auto acknowledge messages retireved from the queue " +
-            			"(true or false, defaults to false). " +
+            			"(true or false, defaults to true). " +
             			"if autoAck is set not set to true, the message must be acknowledge or rejected later " +
             			"with an accoring step.\n" +
-            		"\nOutputs\n:" +
+            		"\nOutputs:\n" +
             		"message: the message retrieved from the queue\n" +
             		"The next 4 outputs represent the message envelope\n" +
             		"deliveryTag: the delivery tag from message envelope\n" +
@@ -176,9 +239,13 @@ public class rmq {
                     @Output("contentEncoding"),
                     @Output("contentType"),
                     @Output("correlationId"),
+                    @Output("deliveryMode"),
                     @Output("expiration"),
+                    @Output("headers"),
                     @Output("messageId"),
+                    @Output("priority"),
                     @Output("replyTo"),
+                    @Output("timestamp"),
                     @Output("type"),
                     @Output("userId")
             },
@@ -222,12 +289,16 @@ public class rmq {
 		if (virtualHost != null && !virtualHost.isEmpty()) {
 			factory.setVirtualHost(virtualHost);
 		}
+		
+		/*
+		 * next we read the message from the queue
+		 */
         try {
         	Connection connection = factory.newConnection();
         	Channel channel = connection.createChannel();
         	
-        	boolean localAutoAck = false;
-        	if (autoAck.equalsIgnoreCase("true".trim())) localAutoAck = true;
+        	boolean localAutoAck = true;
+        	if (autoAck.equalsIgnoreCase("false".trim())) localAutoAck = false;
 
         	resp = channel.basicGet(queueName, localAutoAck);
         	
@@ -255,26 +326,42 @@ public class rmq {
         	return resultMap;
         }
         
-        resultMap.put(OutputNames.RETURN_RESULT, "1");
-        resultMap.put("resultMessage", "message retrieved");
-        resultMap.put("messageCount", Integer.toString(mesgCount));
-        resultMap.put("message", message);
-        resultMap.put("deliveryTag", Long.toString(envelope.getDeliveryTag()));
-        resultMap.put("exchange", envelope.getExchange());
-        resultMap.put("routingKey", envelope.getRoutingKey());
-        resultMap.put("isRedeliver", Boolean.toString(envelope.isRedeliver()));
-        resultMap.put("appId", props.getAppId());
-        resultMap.put("clusterId", props.getClusterId());
-        resultMap.put("contentEncoding", props.getContentEncoding());
-        resultMap.put("contentType", props.getContentType());
-        resultMap.put("correlationId", props.getCorrelationId());
-        if (props.getDeliveryMode() != null) resultMap.put("deliveryMode", Integer.toString(props.getDeliveryMode()));
-        resultMap.put("expiration", props.getExpiration());
-        // resultMap.put("headers");
-        resultMap.put("messageId", props.getMessageId());
-        if (props.getPriority() != null) resultMap.put("priority", props.getPriority().toString());
-        resultMap.put("replyTo", props.getReplyTo());
-		
+        /*
+         * we need to create a JSON string for the headers
+         */
+        Map<String,Object> headers = props.getHeaders();
+        String outHeaders = "";
+        if (headers != null) {
+        	int multipleEntries = 0;
+        	for (Map.Entry<String, Object> entry: headers.entrySet()) {
+        		
+        		String type = entry.getValue().getClass().toString();
+        		
+        		if (type.endsWith("Integer")) {
+        			if (multipleEntries > 0) outHeaders += ","; else outHeaders = "{";
+        			++multipleEntries;
+        			outHeaders += "\""+entry.getKey()+"\":"+entry.getValue().toString();
+        		}
+        		
+        		if (type.endsWith("Boolean")) {
+        			if (multipleEntries > 0) outHeaders += ","; else outHeaders = "{";
+        			++multipleEntries;
+        			outHeaders += "\""+entry.getKey()+"\":"+entry.getValue().toString();
+        		}
+        		
+        		if (type.endsWith("String")) {
+        			if (multipleEntries > 0) outHeaders += ","; else outHeaders = "{";
+        			++multipleEntries;
+        			outHeaders += "\""+entry.getKey()+"\":\""+entry.getValue().toString()+"\"";
+        		}
+        		
+        	}
+        	outHeaders += "}";
+        }
+        
+        /*
+         * next we need to define the "timestamp"-string
+         */
         String time = "";
         if (props.getTimestamp() != null) {
         	Date timestamp = props.getTimestamp();
@@ -292,7 +379,31 @@ public class rmq {
         		}
         	}
         }
-        resultMap.put("timestamp", time);
+        
+        /*
+         * creating the step output
+         */
+        
+        resultMap.put(OutputNames.RETURN_RESULT, "1");
+        resultMap.put("resultMessage", "message retrieved");
+        resultMap.put("messageCount", Integer.toString(mesgCount));
+        resultMap.put("message", message);
+        resultMap.put("deliveryTag", Long.toString(envelope.getDeliveryTag()));
+        resultMap.put("exchange", envelope.getExchange());
+        resultMap.put("routingKey", envelope.getRoutingKey());
+        resultMap.put("isRedeliver", Boolean.toString(envelope.isRedeliver()));
+        resultMap.put("appId", props.getAppId());
+        resultMap.put("clusterId", props.getClusterId());
+        resultMap.put("contentEncoding", props.getContentEncoding());
+        resultMap.put("contentType", props.getContentType());
+        resultMap.put("correlationId", props.getCorrelationId());
+        if (props.getDeliveryMode() != null) resultMap.put("deliveryMode", Integer.toString(props.getDeliveryMode()));
+        resultMap.put("expiration", props.getExpiration());
+        resultMap.put("headers", outHeaders);
+        resultMap.put("messageId", props.getMessageId());
+        if (props.getPriority() != null) resultMap.put("priority", props.getPriority().toString());
+        resultMap.put("replyTo", props.getReplyTo());
+		resultMap.put("timestamp", time);
 		resultMap.put("type", props.getType());
 		resultMap.put("userId", props.getUserId()); 
         

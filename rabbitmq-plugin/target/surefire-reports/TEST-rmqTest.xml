@@ -1,5 +1,5 @@
 <?xml version="1.0" encoding="UTF-8" ?>
-<testsuite failures="0" time="0.393" errors="0" skipped="0" tests="1" name="rmqTest">
+<testsuite failures="0" time="0.437" errors="0" skipped="0" tests="1" name="rmqTest">
   <properties>
     <property name="java.runtime.name" value="Java(TM) SE Runtime Environment"/>
     <property name="sun.boot.library.path" value="/home/markus/dev/jdk1.7.0_45/jre/lib/amd64"/>
@@ -24,7 +24,7 @@
 "/>
     <property name="java.vm.specification.vendor" value="Oracle Corporation"/>
     <property name="os.name" value="Linux"/>
-    <property name="classworlds.conf" value="/home/markus/dev/workspace/.metadata/.plugins/org.eclipse.m2e.launching/launches/m2conf2795698772597445250.tmp"/>
+    <property name="classworlds.conf" value="/home/markus/dev/workspace/.metadata/.plugins/org.eclipse.m2e.launching/launches/m2conf3768786555707615970.tmp"/>
     <property name="sun.jnu.encoding" value="UTF-8"/>
     <property name="java.library.path" value="/usr/java/packages/lib/amd64:/usr/lib64:/lib64:/lib:/usr/lib"/>
     <property name="java.specification.name" value="Java Platform API Specification"/>
@@ -60,5 +60,5 @@
     <property name="sun.desktop" value="gnome"/>
     <property name="sun.cpu.isalist" value=""/>
   </properties>
-  <testcase time="0.314" classname="rmqTest" name="test"/>
+  <testcase time="0.361" classname="rmqTest" name="test"/>
 </testsuite>

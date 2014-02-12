@@ -5,7 +5,6 @@ import java.util.HashMap;
 
 import org.junit.Test;
 
-
 public class rmqTest {
 
 	public String getValueFromMap(Map<String, String> map, String value) {
@@ -26,7 +25,9 @@ public class rmqTest {
 		
 		// q.send(message, mqHost, port, user, pass, virtualHost, exchange, queue)
 		sMesg = q.send("myMessage", "127.0.0.1", "5672", "oo", "Test1234", "ooHost", "amq.rabbitmq.trace", "junit",
-				"", "", "", "text/plain", "", "", "", "", "", "", "", "dd.MM.yyyy", "", "", "");
+				"", "", "", "text/plain", "", "", "", 
+				"{\"h1\":13, \"h2\": \"MeinText\", \"h3\":true}", 
+				"", "", "", "dd.MM.yyyy", "now", "", "");
 		
 		assertTrue("return message wrong", 
 				getValueFromMap(sMesg, "resultMessage").equals("message sent"));
