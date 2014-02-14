@@ -6,8 +6,11 @@ import com.hp.oo.sdk.content.constants.OutputNames;
 import com.hp.oo.sdk.content.constants.ResponseNames;
 import com.hp.oo.sdk.content.plugin.ActionMetadata.MatchType;
 import com.hp.oo.sdk.content.plugin.ActionMetadata.ResponseType;
+//import com.hp.oo.sdk.execution.*;
 
 import com.rabbitmq.client.AMQP;
+import com.rabbitmq.client.AMQP.Queue.DeclareOk;
+import com.rabbitmq.client.AMQP.Queue.DeleteOk;
 import com.rabbitmq.client.ConnectionFactory;
 import com.rabbitmq.client.Connection;
 import com.rabbitmq.client.Channel;
@@ -20,6 +23,7 @@ import java.util.Date;
 import java.util.HashMap;
 import java.util.Map;
 import java.util.UUID;
+import java.io.IOException;
 import java.text.SimpleDateFormat;
 
 public class rmq {
@@ -580,62 +584,64 @@ public class rmq {
 		 * here we send the message
 		 */
 		Integer err = 0;
-        try {
-        	Channel channel = null;
+        
+		Channel channel = null;
         	
-        	if (channelId != null && !channelId.isEmpty()) channel = getChannel(channelId);
+		try {	
+			if (channelId != null && !channelId.isEmpty()) channel = getChannel(channelId);
+		} catch (NullPointerException e) {
+			resultMap.put(OutputNames.RETURN_RESULT, "-1");
+			resultMap.put("resultMessage", "could not ack: null pointer");
+			return resultMap;
+		} catch (Exception e) {
+			resultMap.put("resultMessage", "an error occured: "+err.toString());
+			resultMap.put(OutputNames.RETURN_RESULT, "-1");
+			return resultMap;
+		}
+		
+		if (channel == null) {
+			resultMap.put(OutputNames.RETURN_RESULT, "-1");
+			resultMap.put("resultMessage", "could not get channel");
+			return resultMap;
+		}
         	
-        	if (channel == null) {
-        		resultMap.put(OutputNames.RETURN_RESULT, "-1");
-            	resultMap.put("resultMessage", "could not get channel");
-            	return resultMap;
-        	}
+		if (deliveryTag != null) try {
+			localDeliveryTag = Long.parseLong(deliveryTag);
+		} catch (Exception e) {
+			resultMap.put("resultMessage", "something is wrong with the deliveryTag");
+			resultMap.put(OutputNames.RETURN_RESULT, "-3");
+			return resultMap;
+		}
         	
-        	if (deliveryTag != null) try {
-        		localDeliveryTag = Long.parseLong(deliveryTag);
-        	} catch (Exception e) {
-        		resultMap.put("resultMessage", "something is wrong with the deliveryTag");
-        		resultMap.put(OutputNames.RETURN_RESULT, "-3");
-        		return resultMap;
-        	}
+		try {
+			channel.basicAck(localDeliveryTag, getBool(multiple, false));
+		} catch (Exception e) {
+			resultMap.put("resultMessage", "could not acknowledge message");
+			resultMap.put(OutputNames.RETURN_RESULT, "-2");
+			return resultMap;
+		}
         	
-        	try {
-        		channel.basicAck(localDeliveryTag, getBool(multiple, false));
-        	} catch (Exception e) {
-        		resultMap.put("resultMessage", "could not acknowledge message");
-        		resultMap.put(OutputNames.RETURN_RESULT, "-2");
-        		return resultMap;
-        	}
+		/* if string leaveChannelOpen is explicitly "false" then we close the channel or
+		 * if string leaveChannelOpen is not explicitly true and channel was created in this 
+		 * method then we will close it, because it was not open before!
+		 * 
+		 *  getBool(closeChannel, false):
+		 *     closeChannelOpen == true  ->  result = true
+		 *     closeChannelOpen == false ->  result = false
+		 *     closeChannelOpen == ""    ->  result = false
+		 *     
+		 *  getBool(leaveChannelOpen, true):
+		 *     closeChannelOpen == true  ->  result = true
+		 *     closeChannelOpen == false ->  result = false
+		 *     closeChannelOpen == ""    ->  result = true
         	
-        	/* if string leaveChannelOpen is explicitly "false" then we close the channel or
-        	 * if string leaveChannelOpen is not explicitly true and channel was created in this 
-        	 * method then we will close it, because it was not open before!
-        	 * 
-        	 *  getBool(closeChannel, false):
-        	 *     closeChannelOpen == true  ->  result = true
-        	 *     closeChannelOpen == false ->  result = false
-        	 *     closeChannelOpen == ""    ->  result = false
-        	 *     
-        	 *  getBool(leaveChannelOpen, true):
-        	 *     closeChannelOpen == true  ->  result = true
-        	 *     closeChannelOpen == false ->  result = false
-        	 *     closeChannelOpen == ""    ->  result = true
-        	
-        	 */ 
-        	if (getBool(closeChannel, false)) {
-        		closeChannel(channelId);
-        	} else {
-        		resultMap.put("channelId", channelId);
-        	}
-        } catch (NullPointerException e) {
-        	resultMap.put(OutputNames.RETURN_RESULT, "-1");
-        	resultMap.put("resultMessage", "could not ack: null pointer");
-        	return resultMap;
-        } catch (Exception e) {
-        	resultMap.put("resultMessage", "an error occured: "+err.toString());
-        	resultMap.put(OutputNames.RETURN_RESULT, "-1");
-        	return resultMap;
-        }
+		 */ 
+		if (getBool(closeChannel, false)) {
+			closeChannel(channelId);
+		} else {
+			resultMap.put("channelId", channelId);
+		}
+     
 		
         resultMap.put("resultMessage", "message(s) ack'ed");
     	resultMap.put(OutputNames.RETURN_RESULT, "0");
@@ -663,56 +669,9 @@ public class rmq {
 		/*
 		 * here we send nAck
 		 */
+		Channel channel = null;
         try {
-        	Channel channel = null;
-        	
         	if (channelId != null && !channelId.isEmpty()) channel = getChannel(channelId);
-        	
-        	if (channel == null) {
-        		resultMap.put(OutputNames.RETURN_RESULT, "-1");
-            	resultMap.put("resultMessage", "could not get channel");
-            	return resultMap;
-        	}
-        	
-        	boolean localMultiple = getBool(multiple, false);
-        	boolean localRequeue = getBool(requeue, false);
-        	
-        	if (deliveryTag != null) try {
-        		localDeliveryTag = Long.parseLong(deliveryTag);
-        	} catch (Exception e) {
-        		resultMap.put("resultMessage", "something is wrong with the deliveryTag");
-        		resultMap.put(OutputNames.RETURN_RESULT, "-3");
-        		return resultMap;
-        	}
-        	
-        	try {
-        		channel.basicNack(localDeliveryTag, localMultiple, localRequeue);
-        	} catch (Exception e) {
-        		resultMap.put("resultMessage", "could not nack message");
-        		resultMap.put(OutputNames.RETURN_RESULT, "-2");
-        		return resultMap;
-        	}
-        	
-        	/* if string leaveChannelOpen is explicitly "false" then we close the channel or
-        	 * if string leaveChannelOpen is not explicitly true and channel was created in this 
-        	 * method then we will close it, because it was not open before!
-        	 * 
-        	 *  getBool(closeChannel, false):
-        	 *     closeChannelOpen == true  ->  result = true
-        	 *     closeChannelOpen == false ->  result = false
-        	 *     closeChannelOpen == ""    ->  result = false
-        	 *     
-        	 *  getBool(leaveChannelOpen, true):
-        	 *     closeChannelOpen == true  ->  result = true
-        	 *     closeChannelOpen == false ->  result = false
-        	 *     closeChannelOpen == ""    ->  result = true
-        	
-        	 */ 
-        	if (getBool(closeChannel, false)) {
-        		closeChannel(channelId);
-        	} else {
-        		resultMap.put("channelId", channelId);
-        	}
         } catch (NullPointerException e) {
         	resultMap.put(OutputNames.RETURN_RESULT, "-1");
         	resultMap.put("resultMessage", "could not nack: null pointer");
@@ -722,6 +681,53 @@ public class rmq {
         	resultMap.put(OutputNames.RETURN_RESULT, "-1");
         	return resultMap;
         }
+        
+        if (channel == null) {
+        	resultMap.put(OutputNames.RETURN_RESULT, "-1");
+        	resultMap.put("resultMessage", "could not get channel");
+        	return resultMap;
+        }
+        	
+        boolean localMultiple = getBool(multiple, false);
+        boolean localRequeue = getBool(requeue, false);
+        	
+        if (deliveryTag != null) try {
+        	localDeliveryTag = Long.parseLong(deliveryTag);
+        } catch (Exception e) {
+        	resultMap.put("resultMessage", "something is wrong with the deliveryTag");
+        	resultMap.put(OutputNames.RETURN_RESULT, "-3");
+        	return resultMap;
+        }
+        	
+        try {
+        	channel.basicNack(localDeliveryTag, localMultiple, localRequeue);
+        } catch (Exception e) {
+        	resultMap.put("resultMessage", "could not nack message");
+        	resultMap.put(OutputNames.RETURN_RESULT, "-2");
+        	return resultMap;
+        }
+        	
+        /* if string leaveChannelOpen is explicitly "false" then we close the channel or
+         * if string leaveChannelOpen is not explicitly true and channel was created in this 
+         * method then we will close it, because it was not open before!
+         * 
+         *  getBool(closeChannel, false):
+         *     closeChannelOpen == true  ->  result = true
+         *     closeChannelOpen == false ->  result = false
+         *     closeChannelOpen == ""    ->  result = false
+         *     
+         *  getBool(leaveChannelOpen, true):
+         *     closeChannelOpen == true  ->  result = true
+         *     closeChannelOpen == false ->  result = false
+         *     closeChannelOpen == ""    ->  result = true
+        	
+         */ 
+        if (getBool(closeChannel, false)) {
+        	closeChannel(channelId);
+        } else {
+        	resultMap.put("channelId", channelId);
+        }
+      
 		
         resultMap.put("resultMessage", "nack'ed message");
         resultMap.put(OutputNames.RETURN_RESULT, "0");
@@ -746,48 +752,9 @@ public class rmq {
 			/*
 			 * here we recover the channel
 			 */
+			Channel channel = null;
 	        try {
-	        	Channel channel = null;
-	        	
 	        	if (channelId != null && !channelId.isEmpty()) channel = getChannel(channelId);
-	        	
-	        	if (channel == null) {
-	        		resultMap.put(OutputNames.RETURN_RESULT, "-1");
-	            	resultMap.put("resultMessage", "could not get channel");
-	            	return resultMap;
-	        	}
-	  
-	        	boolean localRequeue = false;
-	        	if (requeue.equalsIgnoreCase("true".trim())) localRequeue = true;
-	        	
-	        	try {
-	        		channel.basicRecover(localRequeue);
-	        	} catch (Exception e) {
-	        		resultMap.put("resultMessage", "could not recover");
-	        		resultMap.put(OutputNames.RETURN_RESULT, "-2");
-	        		return resultMap;
-	        	}
-	        	
-	        	/* if string leaveChannelOpen is explicitly "false" then we close the channel or
-	        	 * if string leaveChannelOpen is not explicitly true and channel was created in this 
-	        	 * method then we will close it, because it was not open before!
-	        	 * 
-	        	 *  getBool(closeChannel, false):
-	        	 *     closeChannelOpen == true  ->  result = true
-	        	 *     closeChannelOpen == false ->  result = false
-	        	 *     closeChannelOpen == ""    ->  result = false
-	        	 *     
-	        	 *  getBool(leaveChannelOpen, true):
-	        	 *     closeChannelOpen == true  ->  result = true
-	        	 *     closeChannelOpen == false ->  result = false
-	        	 *     closeChannelOpen == ""    ->  result = true
-	        	
-	        	 */ 
-	        	if (getBool(closeChannel, false)) {
-	        		closeChannel(channelId);
-	        	} else {
-	        		resultMap.put("channelId", channelId);
-	        	}
 	        } catch (NullPointerException e) {
 	        	resultMap.put(OutputNames.RETURN_RESULT, "-1");
 	        	resultMap.put("resultMessage", "could not recover: null pointer");
@@ -797,6 +764,45 @@ public class rmq {
 	        	resultMap.put(OutputNames.RETURN_RESULT, "-1");
 	        	return resultMap;
 	        }
+	   
+	        if (channel == null) {
+	        	resultMap.put(OutputNames.RETURN_RESULT, "-1");
+	        	resultMap.put("resultMessage", "could not get channel");
+	        	return resultMap;
+	        }
+	  
+	        boolean localRequeue = false;
+	        if (requeue.equalsIgnoreCase("true".trim())) localRequeue = true;
+	        
+	        try {
+	        	channel.basicRecover(localRequeue);
+	        } catch (Exception e) {
+	        	resultMap.put("resultMessage", "could not recover");
+	        	resultMap.put(OutputNames.RETURN_RESULT, "-2");
+	        	return resultMap;
+	        }
+	        	
+	        /* if string leaveChannelOpen is explicitly "false" then we close the channel or
+	         * if string leaveChannelOpen is not explicitly true and channel was created in this 
+	         * method then we will close it, because it was not open before!
+	         * 
+	         *  getBool(closeChannel, false):
+	         *     closeChannelOpen == true  ->  result = true
+	         *     closeChannelOpen == false ->  result = false
+	         *     closeChannelOpen == ""    ->  result = false
+	         *     
+	         *  getBool(leaveChannelOpen, true):
+	         *     closeChannelOpen == true  ->  result = true
+	         *     closeChannelOpen == false ->  result = false
+	         *     closeChannelOpen == ""    ->  result = true
+	        	
+	         */ 
+	        if (getBool(closeChannel, false)) {
+	        	closeChannel(channelId);
+	        } else {
+	        	resultMap.put("channelId", channelId);
+	        }
+	   
 			
 	        resultMap.put("resultMessage", "channel recovered");
 	        resultMap.put(OutputNames.RETURN_RESULT, "0");
@@ -893,36 +899,894 @@ public class rmq {
 	            @Response(text = ResponseNames.SUCCESS, field = OutputNames.RETURN_RESULT, value = "0", matchType = MatchType.COMPARE_GREATER_OR_EQUAL, responseType = ResponseType.RESOLVED),
 	            @Response(text = ResponseNames.FAILURE, field = OutputNames.RETURN_RESULT, value = "0", matchType = MatchType.COMPARE_LESS, responseType = ResponseType.ERROR)
 			})
-		public Map<String, String> closeChannel(
-				@Param(value = "channelId", required = true) String channelId) {
-			Map<String, String> resultMap = new HashMap<String, String>();
+	public Map<String, String> closeChannel(
+			@Param(value = "channelId", required = true) String channelId) {
+		Map<String, String> resultMap = new HashMap<String, String>();
 			
-			try {
-	        	Channel channel = getChannel(channelId);
-	        	if (channel == null) {
-	        		resultMap.put("resultMessage", "could not find channel");
-		        	resultMap.put(OutputNames.RETURN_RESULT, "-1");
-		        	return resultMap;
-	        	}
+		try {
+			Channel channel = getChannel(channelId);
+			if (channel == null) {
+				resultMap.put("resultMessage", "could not find channel");
+				resultMap.put(OutputNames.RETURN_RESULT, "-1");
+				return resultMap;
+			}
 	        	
-	        	Connection con = channel.getConnection();
+			Connection con = channel.getConnection();
 	        	
-	        	channel.close();
-	        	con.close();
+			channel.close();
+			con.close();
 	        	
-	        	channelMap.remove(getChannelUuid(channelId));
-	        } catch (NullPointerException e) {
-	        	resultMap.put(OutputNames.RETURN_RESULT, "-1");
-	        	resultMap.put("resultMessage", "could not close channel: null pointer");
-	        	return resultMap;
-	        } catch (Exception e) {
-	        	resultMap.put("resultMessage", "could not close channel");
-	        	resultMap.put(OutputNames.RETURN_RESULT, "-1");
-	        	return resultMap;
-	        }
-			
-	        resultMap.put(OutputNames.RETURN_RESULT, "0");
-	        resultMap.put("resultMessage", "channel closed");
-	        return resultMap;
+			channelMap.remove(getChannelUuid(channelId));
+		} catch (NullPointerException e) {
+			resultMap.put(OutputNames.RETURN_RESULT, "-1");
+			resultMap.put("resultMessage", "could not close channel: null pointer");
+			return resultMap;
+		} catch (Exception e) {
+			resultMap.put("resultMessage", "could not close channel");
+			resultMap.put(OutputNames.RETURN_RESULT, "-1");
+			return resultMap;
 		}
+			
+		resultMap.put(OutputNames.RETURN_RESULT, "0");
+		resultMap.put("resultMessage", "channel closed");
+		return resultMap;
+	}
+
+	@Action(name = "create temporary queue",
+			description ="creates a temporary queue\n" +
+					"this queue will be deleted automatically when the channel closes.\n" +
+					"\nInput:\n" +
+					"channelId: the channel to be used\n" +
+					"\nOutput:\n" +
+					"queueName: the name of the newly created queue",
+			outputs = {
+			@Output(OutputNames.RETURN_RESULT),
+			@Output("resultMessage"),
+			@Output("queueName")
+		},
+		responses = {
+            @Response(text = ResponseNames.SUCCESS, field = OutputNames.RETURN_RESULT, value = "0", matchType = MatchType.COMPARE_GREATER_OR_EQUAL, responseType = ResponseType.RESOLVED),
+            @Response(text = ResponseNames.FAILURE, field = OutputNames.RETURN_RESULT, value = "0", matchType = MatchType.COMPARE_LESS, responseType = ResponseType.ERROR)
+		}
+			)
+	public Map<String,String> createTempQueue(@Param(value = "channelId", required = true) String channelId) {
+		Map <String,String> resultMap = new HashMap<String,String>();
+		Channel channel = null;
+		DeclareOk queue;
+		
+		try {
+        	if (channelId != null && !channelId.isEmpty()) channel = getChannel(channelId);
+		} catch (Exception e) {
+			resultMap.put(OutputNames.RETURN_RESULT, "-3");
+        	resultMap.put("resultMessage", "could not get channel");
+        	return resultMap;
+		}
+		
+		if (channel == null) {
+			resultMap.put(OutputNames.RETURN_RESULT, "-2");
+			resultMap.put("resultMessage", "channel is null");
+			return resultMap;
+		}
+        	
+		try {
+			queue = channel.queueDeclare();
+		} catch (Exception e) {
+			resultMap.put(OutputNames.RETURN_RESULT, "-1");
+			resultMap.put("resultMessage", "could not create temp. queue");
+			return resultMap;
+		}
+        	
+		
+        	
+		resultMap.put(OutputNames.RETURN_RESULT, "0");
+    	resultMap.put("resultMessage", "temporary queue declared");
+    	resultMap.put("queueName", queue.getQueue());
+		return resultMap;
+	}
+	
+	@Action(name = "create queue passively",
+			description ="creates a queue if it not already exists\n" +
+					"\nInput:\n" +
+					"channelId: the channel to be used\n" +
+					"queueName: the name of the queue" +
+					"\nOutput:\n" +
+					"queueName: the name of the newly created queue" +
+					"messageCount: the messages currently in the queue" +
+					"consumerCount: number of cosumers attached to this queue.",
+			outputs = {
+			@Output(OutputNames.RETURN_RESULT),
+			@Output("resultMessage"),
+			@Output("queueName"),
+			@Output("messageCount"),
+			@Output("consumerCount")
+		},
+		responses = {
+            @Response(text = ResponseNames.SUCCESS, field = OutputNames.RETURN_RESULT, value = "0", matchType = MatchType.COMPARE_GREATER_OR_EQUAL, responseType = ResponseType.RESOLVED),
+            @Response(text = ResponseNames.FAILURE, field = OutputNames.RETURN_RESULT, value = "0", matchType = MatchType.COMPARE_LESS, responseType = ResponseType.ERROR)
+		}
+			)
+	public Map<String,String> createPassiveQueue(@Param(value = "channelId", required = true) String channelId,
+					@Param(value = "queueName", required = true) String queueName) {
+		Map <String,String> resultMap = new HashMap<String,String>();
+		Channel channel = null;
+		DeclareOk queue;
+		Integer messageCount = 0;
+		Integer consumerCount = 0;
+		
+		try {
+        	if (channelId != null && !channelId.isEmpty()) channel = getChannel(channelId);
+		} catch (Exception e) {
+			resultMap.put(OutputNames.RETURN_RESULT, "-1");
+        	resultMap.put("resultMessage", "could not get channel");
+        	return resultMap;
+		}
+		
+		if (channel == null) {
+			resultMap.put(OutputNames.RETURN_RESULT, "-3");
+			resultMap.put("resultMessage", "could not get channel");
+			return resultMap;
+		}
+        	
+		try {
+			queue = channel.queueDeclarePassive(queueName);
+			messageCount = queue.getMessageCount();
+			consumerCount = queue.getConsumerCount();
+		} catch (Exception e) {
+			resultMap.put(OutputNames.RETURN_RESULT, "-2");
+			resultMap.put("resultMessage", "could not create temp. queue");
+			return resultMap;
+		}
+        	
+	
+        	
+		resultMap.put(OutputNames.RETURN_RESULT, "0");
+    	resultMap.put("resultMessage", "queue passively declared");
+    	resultMap.put("queueName", queue.getQueue());
+    	resultMap.put("messageCount", messageCount.toString());
+    	resultMap.put("consumerCount", consumerCount.toString());
+		return resultMap;
+	}
+	
+	@SuppressWarnings("unchecked")
+	@Action(name = "create queue",
+			description ="creates a queue\n" +
+					"\n" +
+					"\nInput:\n" +
+					"channelId: the channel to be used\n" +
+					"queueName: the name of the queue\n" +
+					"durable: shall the queue survive a reboot? true or false, default to true\n" +
+					"exclusive: is this queue bound to the connection? true or false, defaults to false\n" +
+					"autoDelete: delete the queue when no longer in use? true or false, defaults to false\n" +
+					"\nOutput:\n" +
+					"queueName: the name of the newly created queue",
+			outputs = {
+			@Output(OutputNames.RETURN_RESULT),
+			@Output("resultMessage"),
+			@Output("queueName")
+		},
+		responses = {
+            @Response(text = ResponseNames.SUCCESS, field = OutputNames.RETURN_RESULT, value = "0", matchType = MatchType.COMPARE_GREATER_OR_EQUAL, responseType = ResponseType.RESOLVED),
+            @Response(text = ResponseNames.FAILURE, field = OutputNames.RETURN_RESULT, value = "0", matchType = MatchType.COMPARE_LESS, responseType = ResponseType.ERROR)
+		}
+			)
+	public Map<String,String> createQueue(@Param(value = "channelId", required = true) String channelId,
+				@Param(value = "queueName", required = true) String queueName,
+				@Param(value = "durable") String durable,
+				@Param(value = "exclusive") String exclusive,
+				@Param(value = "autoDelete") String autoDelete,
+				@Param(value = "arguments") String args) {
+		Map <String,String> resultMap = new HashMap<String,String>();
+		Map<String,Object> localArgs = new HashMap<String,Object>();
+    	Channel channel = null;
+		DeclareOk queue;
+		Integer messageCount = 0;
+		Integer consumerCount = 0;
+		
+		if (args != null && !args.isEmpty()) try {
+        	Map<String,Object> jason = new HashMap<String,Object>();
+        	
+    		JSONReader rdr = new JSONReader();
+    		jason = (Map<String, Object>) rdr.read(args);
+    		
+    		for (Map.Entry<String, Object> entry: jason.entrySet()) {
+    			String key = entry.getKey();
+    			
+    			if (entry.getValue().getClass().toString().equals("class java.lang.Integer")) {
+    				Integer value = (Integer) entry.getValue();
+    				localArgs.put(key, value);
+    			}
+    			
+    			if (entry.getValue().getClass().toString().equals("class java.lang.Boolean")) {
+    				Boolean value = (Boolean) entry.getValue();
+    				localArgs.put(key, value);
+    			}
+    			
+    			if (entry.getValue().getClass().toString().equals("class java.lang.String")) {
+    				String value = (String) entry.getValue();
+    				localArgs.put(key, value);
+    			}
+    		}
+        } catch (Exception e) {
+        	resultMap.put(OutputNames.RETURN_RESULT, "-3");
+            resultMap.put("resultMessage", "could not read arguments");
+            return resultMap;
+        }
+		
+		if (queueName == null || queueName.isEmpty()) {
+			resultMap.put(OutputNames.RETURN_RESULT, "-4");
+        	resultMap.put("resultMessage", "queueName not declared");
+        	return resultMap;
+		}
+		
+	   	if (channelId != null && !channelId.isEmpty()) try {
+    	   		channel = getChannel(channelId);
+	   	} catch (Exception e) {
+	   		resultMap.put(OutputNames.RETURN_RESULT, "-4");
+	   		resultMap.put("resultMessage", "channelId unknown");
+	   		return resultMap;
+	   	}
+        	
+        		
+	   	if (channel == null) {
+	   		resultMap.put(OutputNames.RETURN_RESULT, "-3");
+	   		resultMap.put("resultMessage", "could not get channel");
+	   		return resultMap;
+	   	}
+        	
+	   	try {
+	   		queue = channel.queueDeclare(queueName, getBool(durable, true), 
+	   				getBool(exclusive, false), getBool(autoDelete, false), localArgs);
+	   		messageCount = queue.getMessageCount();
+	   		consumerCount = queue.getConsumerCount();
+	   	} catch (Exception e) {
+	   		resultMap.put(OutputNames.RETURN_RESULT, "-2");
+	   		resultMap.put("resultMessage", "could not create temp. queue");
+	   		return resultMap;
+	   	}
+        	
+		        	
+		resultMap.put(OutputNames.RETURN_RESULT, "0");
+    	resultMap.put("resultMessage", "queue declared");
+    	resultMap.put("queueName", queue.getQueue());
+    	resultMap.put("messageCount", messageCount.toString());
+    	resultMap.put("consumerCount", consumerCount.toString());
+    	return resultMap;
+	}
+	
+	@Action(name = "delete queue",
+			description ="creates a queue if it not already exists\n" +
+					"\nInput:\n" +
+					"channelId: the channel to be used\n" +
+					"queueName: the name of the queue" +
+					"\nOutput:\n" +
+					"queueName: the name of the newly created queue" +
+					"messageCount: the messages currently in the queue" +
+					"consumerCount: number of cosumers attached to this queue.",
+			outputs = {
+			@Output(OutputNames.RETURN_RESULT),
+			@Output("resultMessage"),
+			@Output("queueName")
+		},
+		responses = {
+            @Response(text = ResponseNames.SUCCESS, field = OutputNames.RETURN_RESULT, value = "0", matchType = MatchType.COMPARE_GREATER_OR_EQUAL, responseType = ResponseType.RESOLVED),
+            @Response(text = ResponseNames.FAILURE, field = OutputNames.RETURN_RESULT, value = "0", matchType = MatchType.COMPARE_LESS, responseType = ResponseType.ERROR)
+		}
+			)
+	public Map<String,String> deleteQueue(@Param(value = "channelId", required = true) String channelId,
+					@Param(value = "queueName", required = true) String queueName,
+					@Param(value = "ifUnused") String ifUnused,
+					@Param(value = "ifEmpty") String ifEmpty) {
+		Map <String,String> resultMap = new HashMap<String,String>();
+		Channel channel = null;
+		DeleteOk queue;
+		Integer messageCount = 0;
+		Integer consumerCount = 0;
+		
+		try {
+        	if (channelId != null && !channelId.isEmpty()) channel = getChannel(channelId);
+        	if (channel == null) throw new IOException();
+		} catch (Exception e) {
+			resultMap.put(OutputNames.RETURN_RESULT, "-1");
+        	resultMap.put("resultMessage", "could not get channel");
+        	return resultMap;
+		}
+		
+		try {
+			queue = channel.queueDelete(queueName, getBool(ifUnused, true), getBool(ifEmpty, true));
+			messageCount = queue.getMessageCount();
+		} catch (Exception e) {
+			e.printStackTrace();
+			resultMap.put(OutputNames.RETURN_RESULT, "-2");
+			resultMap.put("resultMessage", "could not delete queue");
+			return resultMap;
+		}
+        	
+		resultMap.put(OutputNames.RETURN_RESULT, "0");
+    	resultMap.put("resultMessage", "queue deleted");
+    	resultMap.put("messageCount", messageCount.toString());
+    	resultMap.put("consumerCount", consumerCount.toString());
+		return resultMap;
+	}
+	
+	@SuppressWarnings("unchecked")
+	@Action(name = "create exchange",
+			description ="creates a queue\n" +
+					"\n" +
+					"\nInput:\n" +
+					"channelId: the channel to be used\n" +
+					"exchange: the name of the exchange\n" +
+					"durable: shall the exchange survive a reboot? true or false, default to true\n" +
+					"internal: is the exchange internal, i.e. can't be directly published to by a client.? true or false, defaults to false\n" +
+					"autoDelete: delete the exchange when no longer in use? true or false, defaults to false\n" +
+					"\nOutput:\n" +
+					"queueName: the name of the newly created queue",
+			outputs = {
+			@Output(OutputNames.RETURN_RESULT),
+			@Output("resultMessage"),
+			@Output("queueName")
+		},
+		responses = {
+            @Response(text = ResponseNames.SUCCESS, field = OutputNames.RETURN_RESULT, value = "0", matchType = MatchType.COMPARE_GREATER_OR_EQUAL, responseType = ResponseType.RESOLVED),
+            @Response(text = ResponseNames.FAILURE, field = OutputNames.RETURN_RESULT, value = "0", matchType = MatchType.COMPARE_LESS, responseType = ResponseType.ERROR)
+		}
+			)
+	public Map<String,String> createExchange(@Param(value = "channelId", required = true) String channelId,
+				@Param(value = "exchange", required = true) String exchange,
+				@Param(value = "type") String etype,
+				@Param(value = "durable") String durable,
+				@Param(value = "autoDelete") String autoDelete,
+				@Param(value = "internal") String internal,
+				@Param(value = "arguments") String args) {
+		Map <String,String> resultMap = new HashMap<String,String>();
+		Map<String,Object> localArgs = new HashMap<String,Object>();
+    	Channel channel = null;
+    		
+		if (args != null && !args.isEmpty()) try {
+        	Map<String,Object> jason = new HashMap<String,Object>();
+        	
+    		JSONReader rdr = new JSONReader();
+    		jason = (Map<String, Object>) rdr.read(args);
+    		
+    		for (Map.Entry<String, Object> entry: jason.entrySet()) {
+    			String key = entry.getKey();
+    			
+    			if (entry.getValue().getClass().toString().equals("class java.lang.Integer")) {
+    				Integer value = (Integer) entry.getValue();
+    				localArgs.put(key, value);
+    			}
+    			
+    			if (entry.getValue().getClass().toString().equals("class java.lang.Boolean")) {
+    				Boolean value = (Boolean) entry.getValue();
+    				localArgs.put(key, value);
+    			}
+    			
+    			if (entry.getValue().getClass().toString().equals("class java.lang.String")) {
+    				String value = (String) entry.getValue();
+    				localArgs.put(key, value);
+    			}
+    		}
+        } catch (Exception e) {
+        	resultMap.put(OutputNames.RETURN_RESULT, "-3");
+            resultMap.put("resultMessage", "could not read arguments");
+            return resultMap;
+        }
+		
+		if (exchange == null || exchange.isEmpty()) {
+			resultMap.put(OutputNames.RETURN_RESULT, "-4");
+        	resultMap.put("resultMessage", "exchange not declared");
+        	return resultMap;
+		}
+		
+		if (etype == null || etype.isEmpty()) etype = "direct";
+		
+		if (channelId != null && !channelId.isEmpty()) try {
+			channel = getChannel(channelId);
+		} catch (Exception e) {
+			resultMap.put(OutputNames.RETURN_RESULT, "-4");
+			resultMap.put("resultMessage", "channelId unknown");
+			return resultMap;
+		}
+        	
+        		
+		if (channel == null) {
+			resultMap.put(OutputNames.RETURN_RESULT, "-3");
+			resultMap.put("resultMessage", "could not get channel");
+			return resultMap;
+		}
+        	
+		try {
+			channel.exchangeDeclare(exchange, etype, getBool(durable, true), 
+					getBool(autoDelete, false), getBool(internal, false), localArgs);
+		} catch (Exception e) {
+			resultMap.put(OutputNames.RETURN_RESULT, "-2");
+			resultMap.put("resultMessage", "could not create exchange");
+			return resultMap;
+		}
+        	
+		resultMap.put(OutputNames.RETURN_RESULT, "0");
+    	resultMap.put("resultMessage", "exchange declared");
+    	return resultMap;
+	}
+	
+	@Action(name = "delete exchange",
+			description ="creates a queue if it not already exists\n" +
+					"\nInput:\n" +
+					"channelId: the channel to be used\n" +
+					"exchange: the name of the exchange" +
+					"ifUnused" +
+					"\nOutput:\n" +
+					"queueName: the name of the newly created queue" +
+					"messageCount: the messages currently in the queue" +
+					"consumerCount: number of cosumers attached to this queue.",
+			outputs = {
+			@Output(OutputNames.RETURN_RESULT),
+			@Output("resultMessage"),
+			@Output("queueName")
+		},
+		responses = {
+            @Response(text = ResponseNames.SUCCESS, field = OutputNames.RETURN_RESULT, value = "0", matchType = MatchType.COMPARE_GREATER_OR_EQUAL, responseType = ResponseType.RESOLVED),
+            @Response(text = ResponseNames.FAILURE, field = OutputNames.RETURN_RESULT, value = "0", matchType = MatchType.COMPARE_LESS, responseType = ResponseType.ERROR)
+		}
+			)
+	public Map<String,String> deleteExchange(@Param(value = "channelId", required = true) String channelId,
+					@Param(value = "exchange", required = true) String exchange,
+					@Param(value = "ifUnused") String ifUnused) {
+		Map <String,String> resultMap = new HashMap<String,String>();
+		Channel channel = null;
+		Integer messageCount = 0;
+		Integer consumerCount = 0;
+		
+		try {
+        	if (channelId != null && !channelId.isEmpty()) channel = getChannel(channelId);
+        	if (channel == null) throw new IOException();
+		} catch (Exception e) {
+			resultMap.put(OutputNames.RETURN_RESULT, "-1");
+        	resultMap.put("resultMessage", "could not get channel");
+        	return resultMap;
+		}
+	   	
+		try {
+			channel.exchangeDelete(exchange, getBool(ifUnused, true));
+		} catch (Exception e) {
+			e.printStackTrace();
+			resultMap.put(OutputNames.RETURN_RESULT, "-2");
+			resultMap.put("resultMessage", "could not delete exchange");
+			return resultMap;
+		}
+        	
+		resultMap.put(OutputNames.RETURN_RESULT, "0");
+    	resultMap.put("resultMessage", "exchange deleted");
+    	resultMap.put("messageCount", messageCount.toString());
+    	resultMap.put("consumerCount", consumerCount.toString());
+		return resultMap;
+	}
+	
+	@SuppressWarnings("unchecked")
+	@Action(name = "bind queue",
+			description ="binds a queue to an exchange\n" +
+					"\n" +
+					"\nInput:\n" +
+					"channelId: the channel to be used\n" +
+					"queueName: the name of the queue\n" +
+					"durable: shall the queue survive a reboot? true or false, default to true\n" +
+					"exclusive: is this queue bound to the connection? true or false, defaults to false\n" +
+					"autoDelete: delete the queue when no longer in use? true or false, defaults to false\n" +
+					"\nOutput:\n" +
+					"queueName: the name of the newly created queue",
+			outputs = {
+			@Output(OutputNames.RETURN_RESULT),
+			@Output("resultMessage"),
+			@Output("queueName")
+		},
+		responses = {
+            @Response(text = ResponseNames.SUCCESS, field = OutputNames.RETURN_RESULT, value = "0", matchType = MatchType.COMPARE_GREATER_OR_EQUAL, responseType = ResponseType.RESOLVED),
+            @Response(text = ResponseNames.FAILURE, field = OutputNames.RETURN_RESULT, value = "0", matchType = MatchType.COMPARE_LESS, responseType = ResponseType.ERROR)
+		}
+			)
+	public Map<String,String> bindQueue(@Param(value = "channelId", required = true) String channelId,
+				@Param(value = "queueName", required = true) String queueName,
+				@Param(value = "exchange", required = true) String exchange,
+				@Param(value = "routingKey") String routingKey,
+				@Param(value = "arguments") String args) {
+		Map <String,String> resultMap = new HashMap<String,String>();
+		Map<String,Object> localArgs = new HashMap<String,Object>();
+    	Channel channel = null;
+		
+    	
+		if (args != null && !args.isEmpty()) try {
+        	Map<String,Object> jason = new HashMap<String,Object>();
+        	
+    		JSONReader rdr = new JSONReader();
+    		jason = (Map<String, Object>) rdr.read(args);
+    		
+    		for (Map.Entry<String, Object> entry: jason.entrySet()) {
+    			String key = entry.getKey();
+    			
+    			if (entry.getValue().getClass().toString().equals("class java.lang.Integer")) {
+    				Integer value = (Integer) entry.getValue();
+    				localArgs.put(key, value);
+    			}
+    			
+    			if (entry.getValue().getClass().toString().equals("class java.lang.Boolean")) {
+    				Boolean value = (Boolean) entry.getValue();
+    				localArgs.put(key, value);
+    			}
+    			
+    			if (entry.getValue().getClass().toString().equals("class java.lang.String")) {
+    				String value = (String) entry.getValue();
+    				localArgs.put(key, value);
+    			}
+    		}
+        } catch (Exception e) {
+        	resultMap.put(OutputNames.RETURN_RESULT, "-3");
+            resultMap.put("resultMessage", "could not read arguments");
+            return resultMap;
+        }
+		
+		if (queueName == null || queueName.isEmpty()) {
+			resultMap.put(OutputNames.RETURN_RESULT, "-4");
+        	resultMap.put("resultMessage", "queueName not given");
+        	return resultMap;
+		}
+		
+		if (exchange == null || exchange.isEmpty()) {
+			resultMap.put(OutputNames.RETURN_RESULT, "-4");
+        	resultMap.put("resultMessage", "exchange not given");
+        	return resultMap;
+		}
+		
+		if (routingKey == null) routingKey = "";
+    	
+		
+		if (channelId != null && !channelId.isEmpty()) try {
+			channel = getChannel(channelId);
+		} catch (Exception e) {
+			resultMap.put(OutputNames.RETURN_RESULT, "-4");
+			resultMap.put("resultMessage", "channelId unknown");
+			return resultMap;
+		}
+        	
+        		
+		if (channel == null) {
+			resultMap.put(OutputNames.RETURN_RESULT, "-3");
+			resultMap.put("resultMessage", "could not get channel");
+			return resultMap;
+		}
+        	
+		try {
+			channel.queueBind(queueName, exchange, routingKey, localArgs);
+		} catch (Exception e) {
+			resultMap.put(OutputNames.RETURN_RESULT, "-2");
+			resultMap.put("resultMessage", "could not bind queue to exchange");
+			return resultMap;
+		}
+        	
+		resultMap.put(OutputNames.RETURN_RESULT, "0");
+    	resultMap.put("resultMessage", "queue bound to exchange");
+    	return resultMap;
+	}
+	
+	@SuppressWarnings("unchecked")
+	@Action(name = "unbind queue",
+			description ="binds a queue to an exchange\n" +
+					"\n" +
+					"\nInput:\n" +
+					"channelId: the channel to be used\n" +
+					"queueName: the name of the queue\n" +
+					"durable: shall the queue survive a reboot? true or false, default to true\n" +
+					"exclusive: is this queue bound to the connection? true or false, defaults to false\n" +
+					"autoDelete: delete the queue when no longer in use? true or false, defaults to false\n" +
+					"\nOutput:\n" +
+					"queueName: the name of the newly created queue",
+			outputs = {
+			@Output(OutputNames.RETURN_RESULT),
+			@Output("resultMessage"),
+			@Output("queueName")
+		},
+		responses = {
+            @Response(text = ResponseNames.SUCCESS, field = OutputNames.RETURN_RESULT, value = "0", matchType = MatchType.COMPARE_GREATER_OR_EQUAL, responseType = ResponseType.RESOLVED),
+            @Response(text = ResponseNames.FAILURE, field = OutputNames.RETURN_RESULT, value = "0", matchType = MatchType.COMPARE_LESS, responseType = ResponseType.ERROR)
+		}
+			)
+	public Map<String,String> unbindQueue(@Param(value = "channelId", required = true) String channelId,
+				@Param(value = "queueName", required = true) String queueName,
+				@Param(value = "exchange", required = true) String exchange,
+				@Param(value = "routingKey") String routingKey,
+				@Param(value = "arguments") String args) {
+		Map <String,String> resultMap = new HashMap<String,String>();
+		Map<String,Object> localArgs = new HashMap<String,Object>();
+    	Channel channel = null;
+		
+    	
+		if (args != null && !args.isEmpty()) try {
+        	Map<String,Object> jason = new HashMap<String,Object>();
+        	
+    		JSONReader rdr = new JSONReader();
+    		jason = (Map<String, Object>) rdr.read(args);
+    		
+    		for (Map.Entry<String, Object> entry: jason.entrySet()) {
+    			String key = entry.getKey();
+    			
+    			if (entry.getValue().getClass().toString().equals("class java.lang.Integer")) {
+    				Integer value = (Integer) entry.getValue();
+    				localArgs.put(key, value);
+    			}
+    			
+    			if (entry.getValue().getClass().toString().equals("class java.lang.Boolean")) {
+    				Boolean value = (Boolean) entry.getValue();
+    				localArgs.put(key, value);
+    			}
+    			
+    			if (entry.getValue().getClass().toString().equals("class java.lang.String")) {
+    				String value = (String) entry.getValue();
+    				localArgs.put(key, value);
+    			}
+    		}
+        } catch (Exception e) {
+        	resultMap.put(OutputNames.RETURN_RESULT, "-3");
+            resultMap.put("resultMessage", "could not read arguments");
+            return resultMap;
+        }
+		
+		if (queueName == null || queueName.isEmpty()) {
+			resultMap.put(OutputNames.RETURN_RESULT, "-4");
+        	resultMap.put("resultMessage", "queueName not given");
+        	return resultMap;
+		}
+		
+		if (exchange == null || exchange.isEmpty()) {
+			resultMap.put(OutputNames.RETURN_RESULT, "-4");
+        	resultMap.put("resultMessage", "exchange not given");
+        	return resultMap;
+		}
+		
+		if (routingKey == null) routingKey = "";
+    	
+		
+		if (channelId != null && !channelId.isEmpty()) try {
+			channel = getChannel(channelId);
+		} catch (Exception e) {
+			resultMap.put(OutputNames.RETURN_RESULT, "-4");
+			resultMap.put("resultMessage", "channelId unknown");
+			return resultMap;
+		}
+        	
+        		
+		if (channel == null) {
+			resultMap.put(OutputNames.RETURN_RESULT, "-3");
+			resultMap.put("resultMessage", "could not get channel");
+			return resultMap;
+		}
+        	
+		try {
+			channel.queueUnbind(queueName, exchange, routingKey, localArgs);
+		} catch (Exception e) {
+			resultMap.put(OutputNames.RETURN_RESULT, "-2");
+			resultMap.put("resultMessage", "could not unbind queue to exchange");
+			return resultMap;
+		}
+        	
+		resultMap.put(OutputNames.RETURN_RESULT, "0");
+    	resultMap.put("resultMessage", "queue unbound from exchange");
+    	return resultMap;
+	}
+	
+	@SuppressWarnings("unchecked")
+	@Action(name = "bind exchange",
+			description ="binds a queue to an exchange\n" +
+					"\n" +
+					"\nInput:\n" +
+					"channelId: the channel to be used\n" +
+					"queueName: the name of the queue\n" +
+					"durable: shall the queue survive a reboot? true or false, default to true\n" +
+					"exclusive: is this queue bound to the connection? true or false, defaults to false\n" +
+					"autoDelete: delete the queue when no longer in use? true or false, defaults to false\n" +
+					"\nOutput:\n" +
+					"queueName: the name of the newly created queue",
+			outputs = {
+			@Output(OutputNames.RETURN_RESULT),
+			@Output("resultMessage"),
+			@Output("queueName")
+		},
+		responses = {
+            @Response(text = ResponseNames.SUCCESS, field = OutputNames.RETURN_RESULT, value = "0", matchType = MatchType.COMPARE_GREATER_OR_EQUAL, responseType = ResponseType.RESOLVED),
+            @Response(text = ResponseNames.FAILURE, field = OutputNames.RETURN_RESULT, value = "0", matchType = MatchType.COMPARE_LESS, responseType = ResponseType.ERROR)
+		}
+			)
+	public Map<String,String> bindExchange(@Param(value = "channelId", required = true) String channelId,
+				@Param(value = "destination", required = true) String destination,
+				@Param(value = "source", required = true) String source,
+				@Param(value = "routingKey") String routingKey,
+				@Param(value = "arguments") String args) {
+		Map <String,String> resultMap = new HashMap<String,String>();
+		Map<String,Object> localArgs = new HashMap<String,Object>();
+    	Channel channel = null;
+		
+    	
+		if (args != null && !args.isEmpty()) try {
+        	Map<String,Object> jason = new HashMap<String,Object>();
+        	
+    		JSONReader rdr = new JSONReader();
+    		jason = (Map<String, Object>) rdr.read(args);
+    		
+    		for (Map.Entry<String, Object> entry: jason.entrySet()) {
+    			String key = entry.getKey();
+    			
+    			if (entry.getValue().getClass().toString().equals("class java.lang.Integer")) {
+    				Integer value = (Integer) entry.getValue();
+    				localArgs.put(key, value);
+    			}
+    			
+    			if (entry.getValue().getClass().toString().equals("class java.lang.Boolean")) {
+    				Boolean value = (Boolean) entry.getValue();
+    				localArgs.put(key, value);
+    			}
+    			
+    			if (entry.getValue().getClass().toString().equals("class java.lang.String")) {
+    				String value = (String) entry.getValue();
+    				localArgs.put(key, value);
+    			}
+    		}
+        } catch (Exception e) {
+        	resultMap.put(OutputNames.RETURN_RESULT, "-3");
+            resultMap.put("resultMessage", "could not read arguments");
+            return resultMap;
+        }
+		
+		if (destination == null || destination.isEmpty()) {
+			resultMap.put(OutputNames.RETURN_RESULT, "-4");
+        	resultMap.put("resultMessage", "destination not given");
+        	return resultMap;
+		}
+		
+		if (source == null || source.isEmpty()) {
+			resultMap.put(OutputNames.RETURN_RESULT, "-4");
+        	resultMap.put("resultMessage", "source not given");
+        	return resultMap;
+		}
+		
+		if (routingKey == null) routingKey = "";
+    	
+		
+		if (channelId != null && !channelId.isEmpty()) try {
+			channel = getChannel(channelId);
+		} catch (Exception e) {
+			resultMap.put(OutputNames.RETURN_RESULT, "-4");
+			resultMap.put("resultMessage", "channelId unknown");
+			return resultMap;
+		}
+        	
+        		
+		if (channel == null) {
+			resultMap.put(OutputNames.RETURN_RESULT, "-3");
+			resultMap.put("resultMessage", "could not get channel");
+			return resultMap;
+		}
+        	
+		try {
+			channel.exchangeBind(destination, source, routingKey, localArgs);
+		} catch (Exception e) {
+			resultMap.put(OutputNames.RETURN_RESULT, "-2");
+			resultMap.put("resultMessage", "could not bind source to destination exchange");
+			return resultMap;
+		}
+        	
+		resultMap.put(OutputNames.RETURN_RESULT, "0");
+    	resultMap.put("resultMessage", "source exchange bound to dest. exchange");
+    	return resultMap;
+	}
+	
+	@SuppressWarnings("unchecked")
+	@Action(name = "unbind exchange",
+			description ="binds a queue to an exchange\n" +
+					"\n" +
+					"\nInput:\n" +
+					"channelId: the channel to be used\n" +
+					"queueName: the name of the queue\n" +
+					"durable: shall the queue survive a reboot? true or false, default to true\n" +
+					"exclusive: is this queue bound to the connection? true or false, defaults to false\n" +
+					"autoDelete: delete the queue when no longer in use? true or false, defaults to false\n" +
+					"\nOutput:\n" +
+					"queueName: the name of the newly created queue",
+			outputs = {
+			@Output(OutputNames.RETURN_RESULT),
+			@Output("resultMessage"),
+			@Output("queueName")
+		},
+		responses = {
+            @Response(text = ResponseNames.SUCCESS, field = OutputNames.RETURN_RESULT, value = "0", matchType = MatchType.COMPARE_GREATER_OR_EQUAL, responseType = ResponseType.RESOLVED),
+            @Response(text = ResponseNames.FAILURE, field = OutputNames.RETURN_RESULT, value = "0", matchType = MatchType.COMPARE_LESS, responseType = ResponseType.ERROR)
+		}
+			)
+	public Map<String,String> unbindExchange(@Param(value = "channelId", required = true) String channelId,
+				@Param(value = "destination", required = true) String destination,
+				@Param(value = "source", required = true) String source,
+				@Param(value = "routingKey") String routingKey,
+				@Param(value = "arguments") String args) {
+		Map <String,String> resultMap = new HashMap<String,String>();
+		Map<String,Object> localArgs = new HashMap<String,Object>();
+    	Channel channel = null;
+		
+    	
+		if (args != null && !args.isEmpty()) try {
+        	Map<String,Object> jason = new HashMap<String,Object>();
+        	
+    		JSONReader rdr = new JSONReader();
+    		jason = (Map<String, Object>) rdr.read(args);
+    		
+    		for (Map.Entry<String, Object> entry: jason.entrySet()) {
+    			String key = entry.getKey();
+    			
+    			if (entry.getValue().getClass().toString().equals("class java.lang.Integer")) {
+    				Integer value = (Integer) entry.getValue();
+    				localArgs.put(key, value);
+    			}
+    			
+    			if (entry.getValue().getClass().toString().equals("class java.lang.Boolean")) {
+    				Boolean value = (Boolean) entry.getValue();
+    				localArgs.put(key, value);
+    			}
+    			
+    			if (entry.getValue().getClass().toString().equals("class java.lang.String")) {
+    				String value = (String) entry.getValue();
+    				localArgs.put(key, value);
+    			}
+    		}
+        } catch (Exception e) {
+        	resultMap.put(OutputNames.RETURN_RESULT, "-3");
+            resultMap.put("resultMessage", "could not read arguments");
+            return resultMap;
+        }
+		
+		if (destination == null || destination.isEmpty()) {
+			resultMap.put(OutputNames.RETURN_RESULT, "-4");
+        	resultMap.put("resultMessage", "destination not given");
+        	return resultMap;
+		}
+		
+		if (source == null || source.isEmpty()) {
+			resultMap.put(OutputNames.RETURN_RESULT, "-4");
+        	resultMap.put("resultMessage", "source not given");
+        	return resultMap;
+		}
+		
+		if (routingKey == null) routingKey = "";
+    	
+		
+		if (channelId != null && !channelId.isEmpty()) try {
+			channel = getChannel(channelId);
+		} catch (Exception e) {
+			resultMap.put(OutputNames.RETURN_RESULT, "-4");
+			resultMap.put("resultMessage", "channelId unknown");
+			return resultMap;
+		}
+        	
+        		
+		if (channel == null) {
+			resultMap.put(OutputNames.RETURN_RESULT, "-3");
+			resultMap.put("resultMessage", "could not get channel");
+			return resultMap;
+		}
+        	
+		try {
+			channel.exchangeUnbind(destination, source, routingKey, localArgs);
+		} catch (Exception e) {
+			resultMap.put(OutputNames.RETURN_RESULT, "-2");
+			resultMap.put("resultMessage", "could not unbind exchange from exchange");
+			return resultMap;
+		}
+        	
+		resultMap.put(OutputNames.RETURN_RESULT, "0");
+    	resultMap.put("resultMessage", "source exchange unbound from dest. exchange");
+    	return resultMap;
+	}
+	
+	// @Action(name = "createConsumer")
+	public Map<String,String> createConsumer() {
+		Map<String,String> resultMap = new HashMap<String,String>();
+		
+		
+		return resultMap;
+	}
 }
+

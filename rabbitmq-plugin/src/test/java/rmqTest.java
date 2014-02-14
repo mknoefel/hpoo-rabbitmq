@@ -26,7 +26,7 @@ public class rmqTest {
 	
 	
 	@Test
-	public void sendAndRetrieveTest() {
+	public void sendRetrieveAndAckTest() {
 		rmq q = new rmq();
 		Map<String, String> aMesg = new HashMap<String, String>();
 		Map<String, String> rMesg = new HashMap<String, String>();
@@ -44,7 +44,7 @@ public class rmqTest {
 		channelId = sMesg.get("channelId");
 		assertTrue("return message wrong: "+sMesg.get("resultMessage"), sMesg.get("resultMessage").equals("message sent"));
 		
-		rMesg = q.retrieve(channelId, null, null, null, null, null, null, queueName, null, null);
+		rMesg = q.retrieve(channelId, null, null, null, null, null, null, queueName, "false", null);
 		//rMesg = q.retrieve(channelId, "false", mqHost, mqPortString, username, password, virtualHost, queueName, "false", "");
 		
 		assertFalse(rMesg.get("resultMessage"),
@@ -61,9 +61,8 @@ public class rmqTest {
 		aMesg = q.ack(channelId, "true", dTag, "false");
 		
 		assertTrue("message not ack'ed", aMesg.get("resultMessage").equals("message(s) ack'ed"));
-			
-		rMesg = q.retrieve(channelId, null, null, null, null, null, null, queueName, null, null);
-		assertTrue("empty queue not recognized", rMesg.get("resultMessage").equals("no message available"));
+		
+		q.closeChannel(channelId);
 	}
 	
 	
@@ -86,4 +85,139 @@ public class rmqTest {
 		assertTrue("channel could not be closed", mesg.get("resultMessage").equals("channel closed"));
 	}
 	
+	@Test
+	public void tempQueueTest()
+	{
+		rmq q = new rmq();
+		Map<String, String> mesg = new HashMap<String, String>();
+		String channelId = "";
+		
+		mesg = q.createChannel(mqHost, mqPortString, virtualHost, username, password);
+		channelId = mesg.get("channelId");
+		
+		mesg = q.createTempQueue(channelId);
+		assertTrue("channel could not be closed", mesg.get("resultMessage").equals("temporary queue declared"));
+		assertTrue("queueName not created correctly", mesg.get("queueName").startsWith("amq.gen"));
+		
+		mesg = q.closeChannel(channelId);
+		assertTrue("channel could not be closed", mesg.get("resultMessage").equals("channel closed"));
+	}
+	
+	@Test
+	public void createQueueTest()
+	{
+		rmq q = new rmq();
+		Map<String, String> mesg = new HashMap<String, String>();
+		String channelId = "";
+		String queueName = "myTestQ";
+		
+		mesg = q.createChannel(mqHost, mqPortString, virtualHost, username, password);
+		channelId = mesg.get("channelId");
+		
+		mesg = q.createQueue(channelId, queueName, "true", "false", "false", "{\"Test\":true}");
+		assertTrue("queue not created", mesg.get("resultMessage").equals("queue declared"));
+		q.closeChannel(channelId);
+		
+		mesg = q.createChannel(mqHost, mqPortString, virtualHost, username, password);
+		channelId = mesg.get("channelId");
+		
+		mesg = q.createPassiveQueue(channelId, queueName);
+		assertTrue("queue not created", mesg.get("resultMessage").equals("queue passivly declared"));
+		
+		String ifUnused = "false";
+		String ifEmpty = "false";
+		mesg = q.deleteQueue(channelId, queueName, ifUnused, ifEmpty);
+		assertTrue("queue not deleted", mesg.get("resultMessage").equals("queue deleted"));
+		
+		q.closeChannel(channelId);
+	}
+	
+	@Test
+	public void createExchangeTest() {
+		rmq q = new rmq();
+		Map<String, String> mesg = new HashMap<String, String>();
+		String channelId = "";
+		String exchange = "myTestEx";
+		
+		mesg = q.createChannel(mqHost, mqPortString, virtualHost, username, password);
+		channelId = mesg.get("channelId");
+		
+		mesg = q.createExchange(channelId, exchange, null, null, null, null, null);
+		assertTrue("exchange not declared", mesg.get("resultMessage").equals("exchange declared"));
+		
+		String ifUnused = "false";
+		mesg = q.deleteExchange(channelId, exchange, ifUnused);
+		assertTrue("exchange not deleted", mesg.get("resultMessage").equals("exchange deleted"));
+		
+		q.closeChannel(channelId);
+	}
+	
+	@Test
+	public void bindQueueToExchangeTest()
+	{
+		rmq q = new rmq();
+		Map<String, String> mesg = new HashMap<String, String>();
+		String channelId = "";
+		String exchange = "myBindEx";
+		String queueName = "myBindQueue";
+		
+		mesg = q.createChannel(mqHost, mqPortString, virtualHost, username, password);
+		channelId = mesg.get("channelId");
+		
+		mesg = q.createQueue(channelId, queueName, "true", "false", "false", "{\"Test\":true}");
+		assertTrue("queue not created", mesg.get("resultMessage").equals("queue declared"));
+		
+		mesg = q.createExchange(channelId, exchange, null, null, null, null, null);
+		assertTrue("exchange not declared", mesg.get("resultMessage").equals("exchange declared"));
+		
+		mesg = q.bindQueue(channelId, queueName, exchange, queueName, null);
+		assertTrue("queue not bound to exchange", mesg.get("resultMessage").equals("queue bound to exchange"));
+		
+		mesg = q.unbindQueue(channelId, queueName, exchange, queueName, null);
+		assertTrue("queue not unbound from exchange", mesg.get("resultMessage").equals("queue unbound from exchange"));
+		
+		String ifUnused = "false";
+		mesg = q.deleteExchange(channelId, exchange, ifUnused);
+		assertTrue("exchange not deleted", mesg.get("resultMessage").equals("exchange deleted"));
+
+		String ifEmpty = "false";
+		mesg = q.deleteQueue(channelId, queueName, ifUnused, ifEmpty);
+		assertTrue("queue not deleted", mesg.get("resultMessage").equals("queue deleted"));
+		
+		q.closeChannel(channelId);
+	}
+	
+	@Test
+	public void bindExchangeToEchangeTest()
+	{
+		rmq q = new rmq();
+		Map<String, String> mesg = new HashMap<String, String>();
+		String channelId = "";
+		String sExchange = "mySource";
+		String dExchange = "myDestination";
+		
+		mesg = q.createChannel(mqHost, mqPortString, virtualHost, username, password);
+		channelId = mesg.get("channelId");
+		
+		mesg = q.createExchange(channelId, sExchange, null, null, null, null, null);
+		assertTrue("exchange not declared", mesg.get("resultMessage").equals("exchange declared"));
+		
+		mesg = q.createExchange(channelId, dExchange, null, null, null, null, null);
+		assertTrue("exchange not declared", mesg.get("resultMessage").equals("exchange declared"));
+		
+		mesg = q.bindExchange(channelId, dExchange, sExchange, sExchange, null);
+		assertTrue("exchange not bound to exchange", mesg.get("resultMessage").equals("source exchange bound to dest. exchange"));
+		
+		mesg = q.unbindExchange(channelId, dExchange, sExchange, sExchange, null);
+		assertTrue("exchange not unbound from exchange", mesg.get("resultMessage").equals("source exchange unbound from dest. exchange"));
+		
+		String ifUnused = "false";
+		mesg = q.deleteExchange(channelId, sExchange, ifUnused);
+		assertTrue("source exchange not deleted", mesg.get("resultMessage").equals("exchange deleted"));
+
+		mesg = q.deleteExchange(channelId, dExchange, ifUnused);
+		assertTrue("dest. exchange not deleted", mesg.get("resultMessage").equals("exchange deleted"));
+	
+		q.closeChannel(channelId);
+	}
 }
