@@ -4,13 +4,13 @@
   <description></description>
   <groupId>de.knoefel-ffm</groupId>
   <artifactId>rabbitmq-plugin</artifactId>
-  <version>1.0.4.18</version>
+  <version>1.0.6</version>
   <goalPrefix>rabbitmq</goalPrefix>
   <isolatedRealm>false</isolatedRealm>
   <inheritedByDefault>true</inheritedByDefault>
   <mojos>
     <mojo>
-      <goal>plugin-metadata</goal>
+      <goal>build-repo</goal>
       <description></description>
       <requiresDirectInvocation>false</requiresDirectInvocation>
       <requiresProject>false</requiresProject>
@@ -18,7 +18,7 @@
       <aggregator>false</aggregator>
       <requiresOnline>false</requiresOnline>
       <inheritedByDefault>true</inheritedByDefault>
-      <implementation>GeneratedPluginMetadataPlugin</implementation>
+      <implementation>GeneratedPluginRepoBuilderPlugin</implementation>
       <language>java</language>
       <instantiationStrategy>per-lookup</instantiationStrategy>
       <executionStrategy>once-per-session</executionStrategy>
@@ -78,6 +78,33 @@
       </requirements>
     </mojo>
     <mojo>
+      <goal>plugin-metadata</goal>
+      <description></description>
+      <requiresDirectInvocation>false</requiresDirectInvocation>
+      <requiresProject>false</requiresProject>
+      <requiresReports>false</requiresReports>
+      <aggregator>false</aggregator>
+      <requiresOnline>false</requiresOnline>
+      <inheritedByDefault>true</inheritedByDefault>
+      <implementation>GeneratedPluginMetadataPlugin</implementation>
+      <language>java</language>
+      <instantiationStrategy>per-lookup</instantiationStrategy>
+      <executionStrategy>once-per-session</executionStrategy>
+      <threadSafe>false</threadSafe>
+      <parameters>
+        <parameter>
+          <name>session</name>
+          <type>org.apache.maven.execution.MavenSession</type>
+          <required>true</required>
+          <editable>false</editable>
+          <description></description>
+        </parameter>
+      </parameters>
+      <configuration>
+        <session implementation="org.apache.maven.execution.MavenSession">${session}</session>
+      </configuration>
+    </mojo>
+    <mojo>
       <goal>action-metadata</goal>
       <description></description>
       <requiresDirectInvocation>false</requiresDirectInvocation>
@@ -109,33 +136,6 @@
       </parameters>
       <configuration>
         <action implementation="java.lang.String">${action}</action>
-        <session implementation="org.apache.maven.execution.MavenSession">${session}</session>
-      </configuration>
-    </mojo>
-    <mojo>
-      <goal>build-repo</goal>
-      <description></description>
-      <requiresDirectInvocation>false</requiresDirectInvocation>
-      <requiresProject>false</requiresProject>
-      <requiresReports>false</requiresReports>
-      <aggregator>false</aggregator>
-      <requiresOnline>false</requiresOnline>
-      <inheritedByDefault>true</inheritedByDefault>
-      <implementation>GeneratedPluginRepoBuilderPlugin</implementation>
-      <language>java</language>
-      <instantiationStrategy>per-lookup</instantiationStrategy>
-      <executionStrategy>once-per-session</executionStrategy>
-      <threadSafe>false</threadSafe>
-      <parameters>
-        <parameter>
-          <name>session</name>
-          <type>org.apache.maven.execution.MavenSession</type>
-          <required>true</required>
-          <editable>false</editable>
-          <description></description>
-        </parameter>
-      </parameters>
-      <configuration>
         <session implementation="org.apache.maven.execution.MavenSession">${session}</session>
       </configuration>
     </mojo>
