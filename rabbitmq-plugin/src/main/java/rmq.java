@@ -100,6 +100,23 @@ public class rmq {
 		return result;
 	}
 	
+	/*
+	 * purge all channels from channelMap when no longer in use
+	 */
+	private Integer purgeChannelMap() {
+		Integer count = 0;
+		
+		for (Map.Entry<UUID, Channel> entry: channelMap.entrySet()) {
+			/* if channel is already closed */
+			if (!entry.getValue().isOpen()) {
+				channelMap.remove(entry.getKey());
+				count++;
+			}
+		}
+		
+		return count;
+	}
+	
 	@SuppressWarnings("unchecked")
 	@Action(name = "send message",
             description = "sends a message with RabbitMQ\n" +
@@ -186,22 +203,23 @@ public class rmq {
     		
     		for (Map.Entry<String, Object> entry: jason.entrySet()) {
     			String key = entry.getKey();
-    			
-    			if (entry.getValue().getClass().toString().equals("class java.lang.Integer")) {
+    	
+    			if (entry.getValue() instanceof Integer) {
     				Integer value = (Integer) entry.getValue();
     				localHeaders.put(key, value);
     			}
     			
-    			if (entry.getValue().getClass().toString().equals("class java.lang.Boolean")) {
+    			if (entry.getValue() instanceof Boolean) {
     				Boolean value = (Boolean) entry.getValue();
     				localHeaders.put(key, value);
     			}
     			
-    			if (entry.getValue().getClass().toString().equals("class java.lang.String")) {
+    			if (entry.getValue() instanceof String) {
     				String value = (String) entry.getValue();
     				localHeaders.put(key, value);
     			}
     		}
+    		System.out.println("local headers: "+localHeaders);
         	bob = bob.headers(localHeaders);
         } catch (Exception e) {
         	resultMap.put(OutputNames.RETURN_RESULT, "-3");
@@ -981,15 +999,34 @@ public class rmq {
 		resultMap.put("resultMessage", "channel closed");
 		return resultMap;
 	}
-
-	@Action(name = "create temporary queue",
-			description ="creates a temporary queue\n" +
-					"this queue will be deleted automatically when the channel closes.\n" +
-					"\nInput:\n" +
-					"channelId: the channel use\n" +
-					"\nOutput:\n" +
-					"queueName: the name of the newly created queue\n",
+	
+	@Action(name = "purge channels",
+			description = "purges closed channels\n",
 			outputs = {
+					@Output(OutputNames.RETURN_RESULT),
+					@Output("resultMessage")
+			},
+			responses = {
+		            @Response(text = ResponseNames.SUCCESS, field = OutputNames.RETURN_RESULT, value = "0", matchType = MatchType.COMPARE_GREATER_OR_EQUAL, responseType = ResponseType.RESOLVED)
+	})
+	public Map<String,String> purgeChannels() {
+		Map <String,String> resultMap = new HashMap<String,String>();
+		
+		String resultMessage = "purged "+purgeChannelMap().toString()+" channel(s)";
+		
+		resultMap.put(OutputNames.RETURN_RESULT, "0");
+		resultMap.put("resultMessage", resultMessage);
+		return resultMap;
+	}
+	
+	@Action(name = "create temporary queue",
+		description ="creates a temporary queue\n" +
+				"this queue will be deleted automatically when the channel closes.\n" +
+				"\nInput:\n" +
+				"channelId: the channel use\n" +
+				"\nOutput:\n" +
+				"queueName: the name of the newly created queue\n",
+		outputs = {
 			@Output(OutputNames.RETURN_RESULT),
 			@Output("resultMessage"),
 			@Output("queueName")
@@ -998,7 +1035,7 @@ public class rmq {
             @Response(text = ResponseNames.SUCCESS, field = OutputNames.RETURN_RESULT, value = "0", matchType = MatchType.COMPARE_GREATER_OR_EQUAL, responseType = ResponseType.RESOLVED),
             @Response(text = ResponseNames.FAILURE, field = OutputNames.RETURN_RESULT, value = "0", matchType = MatchType.COMPARE_LESS, responseType = ResponseType.ERROR)
 		}
-			)
+	)
 	public Map<String,String> createTempQueue(@Param(value = "channelId", required = true) String channelId) {
 		Map <String,String> resultMap = new HashMap<String,String>();
 		Channel channel = null;
@@ -1985,10 +2022,8 @@ public class rmq {
     		String inputs = "{}";
     		
     		if (properties.getHeaders().get("inputs") != null) {
-    			Object inputsObj = new Object();
-    			inputsObj = properties.getHeaders().get("inputs");
-    			if (inputsObj instanceof String) inputs = (String) inputsObj;
-    		} else {
+    			inputs = properties.getHeaders().get("inputs").toString();
+			} else {
     			inputs = new String(body, "UTF-8");
     		}
     		

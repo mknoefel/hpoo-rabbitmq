@@ -24,6 +24,12 @@ public class rmqTest {
 		return null;
 	} */
 	
+	private void sleep(int seconds) {
+		try {
+			Thread.sleep(seconds * 1000);
+		} catch (Exception e) { /* do nothing */ }
+	}
+	
 	
 	@Test
 	public void sendRetrieveAndAckTest() {
@@ -218,6 +224,38 @@ public class rmqTest {
 		mesg = q.deleteExchange(channelId, dExchange, ifUnused);
 		assertTrue("dest. exchange not deleted", mesg.get("resultMessage").equals("exchange deleted"));
 	
+		q.closeChannel(channelId);
+	}
+	
+	@Test
+	public void createConsumerTest() {
+		rmq q = new rmq();
+		Map<String, String> mesg = new HashMap<String, String>();
+		String channelId = "";
+		String flowUuid = "55acde5e-a562-43d9-a3c9-d325d8b98621";
+		String runName = "Junit Test";
+		String ooHost = "oo10.fritz.box";
+		String ooPortString = "8443";
+		String ooUsername = "admin";
+		String ooPassword = "admin";
+		
+		mesg = q.createConsumer(null, mqHost, mqPortString, username, password, 
+					virtualHost, queueName, flowUuid, runName, ooHost, ooPortString, 
+					ooUsername, ooPassword, null, null);
+		assertTrue("did not create a consumer", mesg.get("resultMessage").equals("consumer created"));
+		
+		channelId = mesg.get("channelId");
+		
+		mesg = q.purgeChannels();
+		System.out.println("purge: "+mesg.get("resultMessage"));
+		
+		mesg = q.send("myMessage", channelId, "false", mqHost, mqPortString, username, password, virtualHost, exchange, queueName,
+				"", "", "", "text/plain", "", "", "", 
+				"{\"inputs\":{\"password\": \"Test1234\"}}", 
+				"", "", "", "dd.MM.yyyy", "now", "", "");
+		
+		sleep(5);
+		
 		q.closeChannel(channelId);
 	}
 }
