@@ -122,7 +122,7 @@ public class rmqTest {
 		channelId = mesg.get("channelId");
 		
 		mesg = q.createPassiveQueue(channelId, queueName);
-		assertTrue("queue not created", mesg.get("resultMessage").equals("queue passivly declared"));
+		assertTrue("queue not created", mesg.get("resultMessage").equals("queue passively declared"));
 		
 		String ifUnused = "false";
 		String ifEmpty = "false";

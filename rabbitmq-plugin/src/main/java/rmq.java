@@ -6,7 +6,6 @@ import com.hp.oo.sdk.content.constants.OutputNames;
 import com.hp.oo.sdk.content.constants.ResponseNames;
 import com.hp.oo.sdk.content.plugin.ActionMetadata.MatchType;
 import com.hp.oo.sdk.content.plugin.ActionMetadata.ResponseType;
-//import com.hp.oo.sdk.execution.*;
 
 import com.rabbitmq.client.AMQP;
 import com.rabbitmq.client.AMQP.Queue.DeclareOk;
@@ -1785,7 +1784,7 @@ public class rmq {
 	public Map<String,String> createConsumer() {
 		Map<String,String> resultMap = new HashMap<String,String>();
 		
-		
+
 		return resultMap;
 	}
 }

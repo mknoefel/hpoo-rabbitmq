@@ -7,7 +7,7 @@
     <version>1.0.0</version>
     <packaging>pom</packaging>
 
-    <name>OO sample content project</name>
+    <name>HP OO plugin to RabbitMQ</name>
     <url>http://www.hp.com</url>
 
     <properties>
