@@ -1780,11 +1780,223 @@ public class rmq {
     	return resultMap;
 	}
 	
-	// @Action(name = "createConsumer")
-	public Map<String,String> createConsumer() {
-		Map<String,String> resultMap = new HashMap<String,String>();
-		
 
+	@SuppressWarnings("unchecked")
+	@Action(name = "create consumer",
+            description = "creates a consumer in RabbitMQ\n" +
+            		"When a message arrives at this consumer the step kicks off a new OO flow. " +
+            		"The input fields for the flow must be given in json format in the header " +
+            			"with the header field 'inputs', " +
+            			"i.e. {\"input1\":\"value1\",\"input2\":\"value2\"}.\n" +
+            			"Since this step makes use the OO REST API it needs a compatible cacert in the " +
+            			"cacerts keystore in your Java installation (JRE_HOME/lib/security/cacerts).\n" +
+            		"\nInputs:\n" +
+            		"channelId: if a channel is already open it can be passed to this step " +
+            			"and a new channel will not be open (although credentials might " +
+            			"be given). The channelId is provided by this step or by createChannel.\n" +
+            		"mqHost: FQDN or ip address of the rabbitMQ host\n" +
+            		"mqPort: port number of the rabbitMQ host\n" +
+            		"username: to log in to rabbitMQ resp. to virtual host\n" +
+            		"password: the password for the given user\n" +
+            		"virtualHost: rabbitMQ's virtual host\n" +
+            		"queueName: the queue to attach consumer to." +
+            		"flowUuid: the uuid of the flow in OO\n" +
+            		"runName: the name the flow as it appears in the reports (not the flow path). " +
+            			"The runName defaults to the consumerTag and looks like amq.gen-...\n" +
+            		"ooHost: the OO host to connect to\n" +
+            		"ooPort: the port of the OO host, defaults to 8443\n" +
+            		"ooUsername: the username the flow shall be started with in OO\n" +
+            		"ooPassword: the corresponding password\n" +
+            		"exclusive: shall the consumer be exclusive? Defaults to true." +
+            		"\nOutputs:\n" +
+            		"channelId: the id of the channel used.\n",
+            outputs = {
+                    @Output(OutputNames.RETURN_RESULT),
+                    @Output("resultMessage"),
+                    @Output("channelId")
+            },
+            responses = {
+                    @Response(text = ResponseNames.SUCCESS, field = OutputNames.RETURN_RESULT, value = "0", matchType = MatchType.COMPARE_GREATER_OR_EQUAL, responseType = ResponseType.RESOLVED),
+                    @Response(text = ResponseNames.FAILURE, field = OutputNames.RETURN_RESULT, value = "0", matchType = MatchType.COMPARE_LESS, responseType = ResponseType.ERROR)
+			})
+	public Map<String,String> createConsumer(
+			@Param(value = "channelId") String channelId,
+			@Param(value = "mqHost") String mqHost,
+			@Param(value = "mqPort") String mqPortString,
+			@Param(value = "username") String username,
+			@Param(value = "password", encrypted = true) String password,
+			@Param(value = "virtualHost") String virtualHost,
+			@Param(value = "queueName") String queueName,
+			@Param(value = "flowUuid", required = true) String flowUuid,
+			@Param(value = "runName") String runName,
+			@Param(value = "ooHost") String ooHost,
+			@Param(value = "ooPort") String ooPortString,
+			@Param(value = "ooUsername") String ooUsername,
+			@Param(value = "ooPassword", encrypted = true) String ooPassword,
+			@Param(value = "exclusive") String exclusive,
+			@Param(value = "arguments") String args) {
+		Map<String,String> resultMap = new HashMap<String,String>();
+		Map<String,String> localChannel = new HashMap<String,String>();
+		Map<String,Object> localArgs = new HashMap<String,Object>();
+    	Integer ooPort;
+		String consumerTag = "";
+    	Channel channel = null;
+    	
+    	
+    	/*
+    	 * check all inputs are not null (channelId follows)
+    	 */
+    	
+    	if (mqHost == null) mqHost = "";
+    	if (mqPortString == null) mqPortString = "";
+    	if (username == null) username = "";
+    	if (password == null) password = "";
+    	if (virtualHost == null) virtualHost = "";
+    	if (queueName == null) queueName = "";
+    	if (flowUuid == null) {
+    		resultMap.put(OutputNames.RETURN_RESULT, "-3");
+            resultMap.put("resultMessage", "no flow uuid given");
+            return resultMap;
+    	}
+    	if (runName == null) runName = "";
+    	if (exclusive == null) exclusive = "";
+    	if (ooHost == null) ooHost = "localhost";
+    	if (ooPortString == null) {
+    		ooPort = 8443;
+    	} else {
+    		try {
+    			ooPort = Integer.parseInt(ooPortString);
+    		} catch (Exception e) {
+    			resultMap.put(OutputNames.RETURN_RESULT, "-3");
+                resultMap.put("resultMessage", "ooPort not readable");
+                return resultMap;
+    		}
+    	}
+    	if (ooUsername == null) ooUsername = "";
+    	if (ooPassword == null) ooPassword = "";
+    	
+    	/*
+    	 * open the channel
+    	 */
+    	
+    	if (channelId != null && !channelId.isEmpty()) try {
+    		channel = getChannel(channelId);
+    	} catch (Exception e) { /* do nothing */ }
+    	if (channel == null) {
+    		localChannel = createChannel(mqHost, mqPortString, virtualHost, username, password);
+    		channelId = localChannel.get("channelId");
+    		channel = getChannel(channelId);
+    	}
+    	
+    	/*
+    	 * read the arguments
+    	 */
+    	if (args != null && !args.isEmpty()) try {
+        	Map<String,Object> jason = new HashMap<String,Object>();
+        	
+    		JSONReader rdr = new JSONReader();
+    		jason = (Map<String, Object>) rdr.read(args);
+    		
+    		for (Map.Entry<String, Object> entry: jason.entrySet()) {
+    			String key = entry.getKey();
+    			
+    			if (entry.getValue() instanceof Integer) {
+    				Integer value = (Integer) entry.getValue();
+    				localArgs.put(key, value);
+    			}
+    			
+    			if (entry.getValue() instanceof Boolean) {
+    				Boolean value = (Boolean) entry.getValue();
+    				localArgs.put(key, value);
+    			}
+    			
+    			if (entry.getValue() instanceof String) {
+    				String value = (String) entry.getValue();
+    				localArgs.put(key, value);
+    			}
+    		}
+        } catch (Exception e) {
+        	resultMap.put(OutputNames.RETURN_RESULT, "-3");
+            resultMap.put("resultMessage", "could not read arguments");
+            return resultMap;
+        }
+    	
+    	/*
+    	 * create consumer must have autoAck set to false. We need to do this in
+    	 * in method. Next we set noLocal to false.
+    	 */
+    	
+    	QConsumer consumer = new QConsumer(channel) {
+    	@Override
+    	public void handleDelivery(String consumerTag,
+    			Envelope envelope,
+    			AMQP.BasicProperties properties,
+    			byte[] body) throws IOException {
+    		Channel channel = getChannel();
+    		String user = getUser();
+    		String pass = getPass();
+    		String flow = getFlow();
+    		String runName = getRunName();
+    		String ooHost = getHost();
+    		Integer ooPort = getPort();
+    		RestApi rest = new RestApi();
+    		    		
+    		/*
+    		 * when the runName is not given we set it to the conumerTag
+    		 */
+    		if (runName.isEmpty()) runName = consumerTag;
+    		
+    		String inputs = "{}";
+    		
+    		if (properties.getHeaders().get("inputs") != null) {
+    			Object inputsObj = new Object();
+    			inputsObj = properties.getHeaders().get("inputs");
+    			if (inputsObj instanceof String) inputs = (String) inputsObj;
+    		} else {
+    			inputs = new String(body, "UTF-8");
+    		}
+    		
+    		String postLink = "https://"+ooHost+":"+ooPort.toString()+"/oo/rest/executions/";
+    		String postRequest = "{\"uuid\":\""+flow+"\",\"runName\":\""+runName+"\","+
+    				"\"logLevel\":\"INFO\",\"inputs\":"+inputs+"}";
+    		
+    		try {
+    			rest.httpPost(postLink, user, pass, postRequest);
+    		} catch (Exception e) {
+    			System.err.println("could not start flow");
+    		}
+ 
+    		channel.basicAck(envelope.getDeliveryTag(), false);
+  
+    	} /* end handleDelivery */
+    	}; /* end QConsumer */;
+		
+    	consumer.setHost(ooHost);
+    	consumer.setPort(ooPort);
+    	consumer.setUser(ooUsername);
+    	consumer.setPass(ooPassword);
+    	consumer.setFlow(flowUuid);
+    	consumer.setRunName(runName);
+    	
+    	
+    	/* 
+    	 * create the consumer HERE
+    	 */
+    	
+    	try {
+			channel.basicConsume(queueName, /* autoAck */ false, consumerTag, /* noLocal */ false, 
+					getBool(exclusive, false), localArgs, consumer);
+		} catch (IOException e) {
+			resultMap.put(OutputNames.RETURN_RESULT, "-1");
+			resultMap.put("resultMessage", "could not create consumer");
+			return resultMap;
+		}
+            
+    	
+    	resultMap.put(OutputNames.RETURN_RESULT, "0");
+		resultMap.put("resultMessage", "consumer created");
+		resultMap.put("channelId", channelId);
+		
 		return resultMap;
 	}
 }
