@@ -105,8 +105,14 @@ public class rmq {
             description = "sends a message with RabbitMQ\n" +
             		"\nInputs:\n" +
             		"message: the message to send\n" +
+            		"channelId: the channel to use for sending messages. " +
+            			"If the channelId is provided the step will not need " +
+            			"'mqHost', 'mqPort', 'username', 'password', and 'virtualHost'.\n" +
+            		"closeChannel: shall the channel be closed after this step? True or false, " +
+            			"but when this field is empty it will leave the channel open when" +
+            			"the channelId was provided otherwise it will close the channel.\n" +
             		"mqHost: FQDN or ip address of the rabbitMQ host\n" +
-            		"mqPort: port number of the rabbitMQ host" +
+            		"mqPort: port number of the rabbitMQ host\n" +
             		"username: to log in to rabbitMQ resp. to virtual host\n" +
             		"password: the password for the given user\n" +
             		"virtualHost: rabbitMQ's virtual host\n" +
@@ -119,7 +125,7 @@ public class rmq {
             		"dateFormat can be used to describe the format for timestamp " +
             		"(see http://docs.oracle.com/javase/7/docs/api/java/text/SimpleDateFormat.html)\n" +
             		"\nOutputs:\n" +
-            		"\nresultMessage: indicates success or failure reason.",
+            		"channelId: the channelId if left open.\n",
             outputs = {
                     @Output(OutputNames.RETURN_RESULT),
                     @Output("resultMessage"),
@@ -312,8 +318,14 @@ public class rmq {
 	@Action(name = "retrieve message",
             description = "retrieves a message from RabbitMQ\n"+
             		"\nInputs:\n" +
-            		"mqHost: rabbitMQ hostname or ip address\n" +
-            		"mqPort: port of the rabbitMQ host, defaults to 5672\n" +
+            		"channelId: the channel to use to retrieve messages. " +
+            			"If the channelId is provided the step will not need " +
+            			"'mqHost', 'mqPort', 'username', 'password', and 'virtualHost'.\n" +
+            		"closeChannel: shall the channel be closed after this step? True or false, " +
+            			"but when this field is empty it will leave the channel open when" +
+            			"the channelId was provided otherwise it will close the channel.\n" +
+            		"mqHost: FQDN or ip address of the rabbitMQ host\n" +
+            		"mqPort: port number of the rabbitMQ host\n" +
             		"username: to log in to rabbitMQ resp. to virtual host\n" +
             		"password: the password for the given user\n" +
             		"virtualHost: rabbitMQ's virtual host\n" +
@@ -326,12 +338,13 @@ public class rmq {
                 		"(see http://docs.oracle.com/javase/7/docs/api/java/text/SimpleDateFormat.html)\n" +
             		"\nOutputs:\n" +
             		"message: the message retrieved from the queue\n" +
+            		"channelId: the channelId if left open.\n" +
             		"The next 4 outputs represent the message envelope\n" +
             		"deliveryTag: the delivery tag from message envelope\n" +
             		"exchange: exchange from envelope\n" +
             		"routingKey: routingKey from envelope\n" +
             		"isRedilver: is the message redeliverd (causes for redelivery could be that the original " +
-            		"cosumer was not available and another cosumer was chosen by rabbitMQ\n" +
+            			"cosumer was not available and another cosumer was chosen by rabbitMQ\n" +
             		"The next outputs represent the message properties",
             outputs = {
                     @Output(OutputNames.RETURN_RESULT),
@@ -563,6 +576,15 @@ public class rmq {
 	}
 	
 	@Action(name = "acknowledge message",
+		description = "acknowledges a message." +
+				"\nInputs:\n" +
+				"channelId: the channel to use.\n" +
+				"closeChannel: shall the channel be closed after this step? True or false.\n" +
+				"deliveryTag: indicates the message to acknowledge\n" +
+				"multiple: acknowledge mutliple messages (up to this one)?" +
+				"True or false, defaults to false.\n" +
+				"\nOutput:\n" +
+				"channelId: the channelId if left open.\n",
 		outputs = {
 			@Output(OutputNames.RETURN_RESULT),
 			@Output("resultMessage")
@@ -648,6 +670,16 @@ public class rmq {
 	}
 	
 	@Action(name = "reject acknowledge message",
+		description = "sends a not 'acknowledged' for a message." +
+				"\nInputs:\n" +
+				"channelId: the channel to use.\n" +
+				"closeChannel: shall the channel be closed after this step? True or false.\n" +
+				"deliveryTag: indicates the message to 'not acknowledge'\n" +
+				"multiple: 'not acknowledge' mutliple messages (up to this one)?" +
+				"True or false, defaults to false.\n" +
+				"requeue: shall the messages be requeued? True or false, defaults to false.\n" +
+				"\nOutput:\n" +
+				"channelId: the channelId if left open.\n",
 		outputs = {
 			@Output(OutputNames.RETURN_RESULT),
 			@Output("resultMessage")
@@ -734,6 +766,13 @@ public class rmq {
 	}
 	
 	@Action(name = "recover channel",
+			description = "resend unknowledged messages\n" +
+					"\nInputs:\n" +
+	        		"channelId: the channel to recover.\n" +
+	    			"closeChannel: shall the channel be closed after this step? True or false.\n" +
+	    			"requeue: shall the messages be requeued? True or false, defaults to false.\n" +
+	    			"\nOutput:\n" +
+	    			"channelId: the channelId if left open.\n",
 			outputs = {
 				@Output(OutputNames.RETURN_RESULT),
 				@Output("resultMessage")
@@ -809,6 +848,15 @@ public class rmq {
 		}
 	
 	@Action(name = "create channel",
+			description = "creates a channel\n" +
+            		"\nInputs:\n" +
+            		"mqHost: FQDN or ip address of the rabbitMQ host\n" +
+            		"mqPort: port number of the rabbitMQ host\n" +
+            		"username: to log in to rabbitMQ resp. to virtual host\n" +
+            		"password: the password for the given user\n" +
+            		"virtualHost: rabbitMQ's virtual host\n" +
+            		"\nOutputs:\n" +
+            		"channelId: the newly created channelId.\n",
 			outputs = {
 				@Output(OutputNames.RETURN_RESULT),
 				@Output("resultMessage"),
@@ -889,6 +937,9 @@ public class rmq {
 		}
 	
 	@Action(name = "close channel",
+			description = "closes a channel in RabbitMQ\n" +
+            		"\nInputs:\n" +
+            		"channelId: the channel to close\n. ",
 			outputs = {
 				@Output(OutputNames.RETURN_RESULT),
 				@Output("resultMessage"),
@@ -935,9 +986,9 @@ public class rmq {
 			description ="creates a temporary queue\n" +
 					"this queue will be deleted automatically when the channel closes.\n" +
 					"\nInput:\n" +
-					"channelId: the channel to be used\n" +
+					"channelId: the channel use\n" +
 					"\nOutput:\n" +
-					"queueName: the name of the newly created queue",
+					"queueName: the name of the newly created queue\n",
 			outputs = {
 			@Output(OutputNames.RETURN_RESULT),
 			@Output("resultMessage"),
@@ -1153,12 +1204,13 @@ public class rmq {
 	}
 	
 	@Action(name = "delete queue",
-			description ="creates a queue if it not already exists\n" +
+			description ="deletes a queue\n" +
 					"\nInput:\n" +
 					"channelId: the channel to be used\n" +
 					"queueName: the name of the queue" +
+					"ifUnused: delete the queue only when not in use? True or false, defaults to true\n" +
+					"ifEmpty: delete the queue only when it is empty? True or false, defaults to true\n" +
 					"\nOutput:\n" +
-					"queueName: the name of the newly created queue" +
 					"messageCount: the messages currently in the queue" +
 					"consumerCount: number of cosumers attached to this queue.",
 			outputs = {
@@ -1209,16 +1261,13 @@ public class rmq {
 	
 	@SuppressWarnings("unchecked")
 	@Action(name = "create exchange",
-			description ="creates a queue\n" +
-					"\n" +
+			description ="creates an exchange\n" +
 					"\nInput:\n" +
 					"channelId: the channel to be used\n" +
 					"exchange: the name of the exchange\n" +
 					"durable: shall the exchange survive a reboot? true or false, default to true\n" +
 					"internal: is the exchange internal, i.e. can't be directly published to by a client.? true or false, defaults to false\n" +
-					"autoDelete: delete the exchange when no longer in use? true or false, defaults to false\n" +
-					"\nOutput:\n" +
-					"queueName: the name of the newly created queue",
+					"autoDelete: delete the exchange when no longer in use? true or false, defaults to false\n",
 			outputs = {
 			@Output(OutputNames.RETURN_RESULT),
 			@Output("resultMessage"),
@@ -1308,11 +1357,11 @@ public class rmq {
 	}
 	
 	@Action(name = "delete exchange",
-			description ="creates a queue if it not already exists\n" +
+			description ="deletes an exchange\n" +
 					"\nInput:\n" +
-					"channelId: the channel to be used\n" +
+					"channelId: the channel to use\n" +
 					"exchange: the name of the exchange" +
-					"ifUnused" +
+					"ifUnused: delete the exchange only when not in use? True or false, defaults to true" +
 					"\nOutput:\n" +
 					"queueName: the name of the newly created queue" +
 					"messageCount: the messages currently in the queue" +
@@ -1363,7 +1412,6 @@ public class rmq {
 	@SuppressWarnings("unchecked")
 	@Action(name = "bind queue",
 			description ="binds a queue to an exchange\n" +
-					"\n" +
 					"\nInput:\n" +
 					"channelId: the channel to be used\n" +
 					"queueName: the name of the queue\n" +
@@ -1467,20 +1515,16 @@ public class rmq {
 	
 	@SuppressWarnings("unchecked")
 	@Action(name = "unbind queue",
-			description ="binds a queue to an exchange\n" +
-					"\n" +
+			description ="unbinds a queue from an exchange\n" +
 					"\nInput:\n" +
 					"channelId: the channel to be used\n" +
 					"queueName: the name of the queue\n" +
-					"durable: shall the queue survive a reboot? true or false, default to true\n" +
-					"exclusive: is this queue bound to the connection? true or false, defaults to false\n" +
-					"autoDelete: delete the queue when no longer in use? true or false, defaults to false\n" +
-					"\nOutput:\n" +
-					"queueName: the name of the newly created queue",
+					"exchange: name of the exchange to unbind from\n" +
+					"routingKey: the routingKey used for the binding\n" +
+					"arguments: arguments to pass (see RabbitMQ documentation for details)\n",
 			outputs = {
 			@Output(OutputNames.RETURN_RESULT),
-			@Output("resultMessage"),
-			@Output("queueName")
+			@Output("resultMessage")
 		},
 		responses = {
             @Response(text = ResponseNames.SUCCESS, field = OutputNames.RETURN_RESULT, value = "0", matchType = MatchType.COMPARE_GREATER_OR_EQUAL, responseType = ResponseType.RESOLVED),
@@ -1572,20 +1616,16 @@ public class rmq {
 	
 	@SuppressWarnings("unchecked")
 	@Action(name = "bind exchange",
-			description ="binds a queue to an exchange\n" +
-					"\n" +
-					"\nInput:\n" +
-					"channelId: the channel to be used\n" +
-					"queueName: the name of the queue\n" +
-					"durable: shall the queue survive a reboot? true or false, default to true\n" +
-					"exclusive: is this queue bound to the connection? true or false, defaults to false\n" +
-					"autoDelete: delete the queue when no longer in use? true or false, defaults to false\n" +
-					"\nOutput:\n" +
-					"queueName: the name of the newly created queue",
-			outputs = {
+		description ="binds an exchange to another exchange\n" +
+				"\nInput:\n" +
+				"channelId: the channel to be used\n" +
+				"destination: name of the destination exchange\n" +
+				"source: the name of the source exchange\n" +
+				"routingKey: the routingKey used for the binding\n" +
+				"arguments: arguments to pass (see RabbitMQ documentation for details)\n",
+		outputs = {
 			@Output(OutputNames.RETURN_RESULT),
-			@Output("resultMessage"),
-			@Output("queueName")
+			@Output("resultMessage")
 		},
 		responses = {
             @Response(text = ResponseNames.SUCCESS, field = OutputNames.RETURN_RESULT, value = "0", matchType = MatchType.COMPARE_GREATER_OR_EQUAL, responseType = ResponseType.RESOLVED),
@@ -1677,20 +1717,16 @@ public class rmq {
 	
 	@SuppressWarnings("unchecked")
 	@Action(name = "unbind exchange",
-			description ="binds a queue to an exchange\n" +
-					"\n" +
+			description ="unbinds an exchange from another exchange\n" +
 					"\nInput:\n" +
 					"channelId: the channel to be used\n" +
-					"queueName: the name of the queue\n" +
-					"durable: shall the queue survive a reboot? true or false, default to true\n" +
-					"exclusive: is this queue bound to the connection? true or false, defaults to false\n" +
-					"autoDelete: delete the queue when no longer in use? true or false, defaults to false\n" +
-					"\nOutput:\n" +
-					"queueName: the name of the newly created queue",
-			outputs = {
+					"destination: the name of the destination exchange\n" +
+					"source: name of the source exchange\n" +
+					"routingKey: the routingKey used for the binding\n" +
+					"arguments: arguments to pass (see RabbitMQ documentation for details)\n",
+		outputs = {
 			@Output(OutputNames.RETURN_RESULT),
-			@Output("resultMessage"),
-			@Output("queueName")
+			@Output("resultMessage")
 		},
 		responses = {
             @Response(text = ResponseNames.SUCCESS, field = OutputNames.RETURN_RESULT, value = "0", matchType = MatchType.COMPARE_GREATER_OR_EQUAL, responseType = ResponseType.RESOLVED),
