@@ -16,7 +16,9 @@ import com.rabbitmq.client.Channel;
 import com.rabbitmq.client.Envelope;
 import com.rabbitmq.client.GetResponse;
 import com.rabbitmq.tools.json.JSONReader;
+import com.rabbitmq.tools.json.JSONWriter;
 
+import java.util.ArrayList;
 import java.util.Calendar;
 import java.util.Date;
 import java.util.HashMap;
@@ -199,6 +201,7 @@ public class rmq {
         	Map<String,Object> localHeaders = new HashMap<String,Object>();
         	
     		JSONReader rdr = new JSONReader();
+    		JSONWriter wtr = new JSONWriter();
     		jason = (Map<String, Object>) rdr.read(headers);
     		
     		for (Map.Entry<String, Object> entry: jason.entrySet()) {
@@ -218,9 +221,18 @@ public class rmq {
     				String value = (String) entry.getValue();
     				localHeaders.put(key, value);
     			}
+    			
+    			if (entry.getValue() instanceof HashMap) {
+    				String value = wtr.write(entry.getValue());
+    				localHeaders.put(key, value);
+    			}
+    			
+    			if (entry.getValue() instanceof ArrayList) {
+    				String value = wtr.write(entry.getValue());
+    				localHeaders.put(key, value);
+     			}
     		}
-    		System.out.println("local headers: "+localHeaders);
-        	bob = bob.headers(localHeaders);
+			bob = bob.headers(localHeaders);
         } catch (Exception e) {
         	resultMap.put(OutputNames.RETURN_RESULT, "-3");
             resultMap.put("resultMessage", "could not read headers");
@@ -516,29 +528,42 @@ public class rmq {
         String outHeaders = "";
         if (headers != null) {
         	int multipleEntries = 0;
+        	JSONWriter wtr = new JSONWriter();
+        	
         	for (Map.Entry<String, Object> entry: headers.entrySet()) {
         		
-        		String type = entry.getValue().getClass().toString();
-        		
-        		if (type.endsWith("Integer")) {
+        		if (entry.getValue() instanceof Integer) {
         			if (multipleEntries > 0) outHeaders += ","; else outHeaders = "{";
         			++multipleEntries;
         			outHeaders += "\""+entry.getKey()+"\":"+entry.getValue().toString();
         		}
         		
-        		if (type.endsWith("Boolean")) {
+        		if (entry.getValue() instanceof Boolean) {
         			if (multipleEntries > 0) outHeaders += ","; else outHeaders = "{";
         			++multipleEntries;
         			outHeaders += "\""+entry.getKey()+"\":"+entry.getValue().toString();
         		}
         		
-        		if (type.endsWith("String")) {
+        		if (entry.getValue() instanceof String) {
         			if (multipleEntries > 0) outHeaders += ","; else outHeaders = "{";
         			++multipleEntries;
         			outHeaders += "\""+entry.getKey()+"\":\""+entry.getValue().toString()+"\"";
         		}
         		
-        	}
+        		if (entry.getValue() instanceof HashMap) {
+        			if (multipleEntries > 0) outHeaders += ","; else outHeaders = "{";
+        			++multipleEntries;
+        			outHeaders += "\""+entry.getKey()+"\":"
+        					+wtr.write(entry.getValue().toString());
+        		}
+        		
+        		if (entry.getValue() instanceof ArrayList) {
+        			if (multipleEntries > 0) outHeaders += ","; else outHeaders = "{";
+        			++multipleEntries;
+        			outHeaders += "\""+entry.getKey()+"\":"
+        					+wtr.write(entry.getValue().toString());
+        		}
+       	}
         	outHeaders += "}";
         }
         
@@ -893,6 +918,13 @@ public class rmq {
 			Map<String, String> resultMap = new HashMap<String, String>();
 			ConnectionFactory factory = new ConnectionFactory();
 			UUID uuid = new UUID(0,0);
+			
+			/*
+			 * as a kind of housekeeping we purge all channels from the channelMap
+			 * that still have an entry but the connection is already closed in
+			 * RabbitMQ.
+			 */
+			purgeChannelMap();
         	
 			if (mqHost == null) mqHost = "";
 	        if (mqPortString == null) mqPortString = "";
@@ -970,6 +1002,13 @@ public class rmq {
 	public Map<String, String> closeChannel(
 			@Param(value = "channelId", required = true) String channelId) {
 		Map<String, String> resultMap = new HashMap<String, String>();
+		
+		/*
+		 * as a kind of housekeeping we purge all channels from the channelMap
+		 * that still have an entry but the connection is already closed in
+		 * RabbitMQ.
+		 */
+		purgeChannelMap();
 			
 		try {
 			Channel channel = getChannel(channelId);
@@ -1000,24 +1039,6 @@ public class rmq {
 		return resultMap;
 	}
 	
-	@Action(name = "purge channels",
-			description = "purges closed channels\n",
-			outputs = {
-					@Output(OutputNames.RETURN_RESULT),
-					@Output("resultMessage")
-			},
-			responses = {
-		            @Response(text = ResponseNames.SUCCESS, field = OutputNames.RETURN_RESULT, value = "0", matchType = MatchType.COMPARE_GREATER_OR_EQUAL, responseType = ResponseType.RESOLVED)
-	})
-	public Map<String,String> purgeChannels() {
-		Map <String,String> resultMap = new HashMap<String,String>();
-		
-		String resultMessage = "purged "+purgeChannelMap().toString()+" channel(s)";
-		
-		resultMap.put(OutputNames.RETURN_RESULT, "0");
-		resultMap.put("resultMessage", resultMessage);
-		return resultMap;
-	}
 	
 	@Action(name = "create temporary queue",
 		description ="creates a temporary queue\n" +
@@ -2014,6 +2035,13 @@ public class rmq {
     		Integer ooPort = getPort();
     		RestApi rest = new RestApi();
     		    		
+    		/*
+			 * as a kind of housekeeping we purge all channels from the channelMap
+			 * that still have an entry but the connection is already closed in
+			 * RabbitMQ.
+			 */
+			purgeChannelMap();
+			
     		/*
     		 * when the runName is not given we set it to the conumerTag
     		 */

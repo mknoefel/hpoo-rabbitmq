@@ -44,7 +44,7 @@ public class rmqTest {
 		// q.send(message, mqHost, port, user, pass, virtualHost, exchange, queue)
 		sMesg = q.send("myMessage", null, "false", mqHost, mqPortString, username, password, virtualHost, exchange, queueName,
 				"", "", "", "text/plain", "", "", "", 
-				"{\"h1\":13, \"h2\": \"MeinText\", \"h3\":true}", 
+				"{\"h1\":13, \"h2\": \"MeinText\", \"h3\":true,\"h4\":[1, 2, 3]}", 
 				"", "", "", "dd.MM.yyyy", "now", "", "");
 		
 		channelId = sMesg.get("channelId");
@@ -245,9 +245,6 @@ public class rmqTest {
 		assertTrue("did not create a consumer", mesg.get("resultMessage").equals("consumer created"));
 		
 		channelId = mesg.get("channelId");
-		
-		mesg = q.purgeChannels();
-		System.out.println("purge: "+mesg.get("resultMessage"));
 		
 		mesg = q.send("myMessage", channelId, "false", mqHost, mqPortString, username, password, virtualHost, exchange, queueName,
 				"", "", "", "text/plain", "", "", "", 
