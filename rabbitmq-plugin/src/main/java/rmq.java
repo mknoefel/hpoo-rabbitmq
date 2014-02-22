@@ -105,18 +105,77 @@ public class rmq {
 	/*
 	 * purge all channels from channelMap when no longer in use
 	 */
-	private Integer purgeChannelMap() {
+	private void purgeChannelMap() {
 		Integer count = 0;
 		
-		for (Map.Entry<UUID, Channel> entry: channelMap.entrySet()) {
-			/* if channel is already closed */
-			if (!entry.getValue().isOpen()) {
-				channelMap.remove(entry.getKey());
-				count++;
+		try {
+			for (Map.Entry<UUID, Channel> entry: channelMap.entrySet()) {
+				/* if channel is already closed */
+				if (!entry.getValue().isOpen()) {
+					channelMap.remove(entry.getKey());
+					count++;
+				}
+			} 
+		} catch (Exception e) { /* do nothing */ }
+	}
+	
+	private ArrayList<GetResponse> getMessagesByCorrId(String mqHost, String mqPort,
+			String mqUser, String mqPass, String virtualHost,
+			String queueName, String corrId) {
+		ArrayList<GetResponse> mesgs = new ArrayList<GetResponse>();
+		Map<String,String> channelResult;
+		int mCount; /* messageCount */
+		Channel channel;
+		
+		System.out.println("checking: "+corrId);
+		
+		/* set up a connection to mq */
+		channelResult = createChannel(mqHost, mqPort, virtualHost, mqUser, mqPass);
+		if (channelResult.get("channelId") == null) return null;
+		channel = getChannel(channelResult.get("channelId"));
+		if (channel == null) return null;
+		
+		/*
+		 * loop thru all messages in the queue but do not acknowledge them
+		 */
+		do {
+			GetResponse resp = null;
+			try {
+				resp = channel.basicGet(queueName, false);
+			} catch (Exception e) {
+				System.out.println("basicGet: "+e.getMessage());
 			}
+			
+			/* we can exit when there are no more messages */
+			if (resp == null) return mesgs;
+			
+			try {
+				channel.basicNack(resp.getEnvelope().getDeliveryTag(), false, true);
+				System.out.println("found mesg: "+new String(resp.getBody(), "UTF-8"));
+				
+				mCount = resp.getMessageCount();
+			} catch (Exception e) { 
+				System.out.println("basicNack: "+e.getMessage());
+				mCount = 0;
+			}
+			
+			if (resp.getProps().getCorrelationId().equals(corrId)) {
+				mesgs.add(resp);
+				System.out.println("Adding mesg:");
+			}
+			
+		} while (mCount > 0);
+
+		/* close the connection */
+		Connection conn = channel.getConnection();
+		try {
+			channel.close();
+			conn.close();
+		} catch (IOException e) {
+			/* do nothing */
 		}
 		
-		return count;
+		return mesgs;
 	}
 	
 	@SuppressWarnings("unchecked")
@@ -232,7 +291,7 @@ public class rmq {
     				localHeaders.put(key, value);
      			}
     		}
-			bob = bob.headers(localHeaders);
+    		bob = bob.headers(localHeaders);
         } catch (Exception e) {
         	resultMap.put(OutputNames.RETURN_RESULT, "-3");
             resultMap.put("resultMessage", "could not read headers");
@@ -508,64 +567,13 @@ public class rmq {
         } else {
         	resultMap.put("channelId", channelId);
         }
-        /*  } catch (NullPointerException e) {
-        	String rMesg = "message not retrieved: null pointer: "+err.toString()+"\n"+e.getStackTrace().toString();
-        	resultMap.put(OutputNames.RETURN_RESULT, "-3");
-        	resultMap.put("resultMessage", rMesg);
-        	resultMap.put("channelId", channelId);
-        	return resultMap;
-        } catch (Exception e) {
-        	resultMap.put(OutputNames.RETURN_RESULT, "-2");
-        	resultMap.put("resultMessage", "an error occured while reading message");
-        	resultMap.put("channelId", channelId);
-        	return resultMap;
-        } */
+       
         
         /*
          * we need to create a JSON string for the headers
          */
-        Map<String,Object> headers = props.getHeaders();
-        String outHeaders = "";
-        if (headers != null) {
-        	int multipleEntries = 0;
-        	JSONWriter wtr = new JSONWriter();
-        	
-        	for (Map.Entry<String, Object> entry: headers.entrySet()) {
-        		
-        		if (entry.getValue() instanceof Integer) {
-        			if (multipleEntries > 0) outHeaders += ","; else outHeaders = "{";
-        			++multipleEntries;
-        			outHeaders += "\""+entry.getKey()+"\":"+entry.getValue().toString();
-        		}
-        		
-        		if (entry.getValue() instanceof Boolean) {
-        			if (multipleEntries > 0) outHeaders += ","; else outHeaders = "{";
-        			++multipleEntries;
-        			outHeaders += "\""+entry.getKey()+"\":"+entry.getValue().toString();
-        		}
-        		
-        		if (entry.getValue() instanceof String) {
-        			if (multipleEntries > 0) outHeaders += ","; else outHeaders = "{";
-        			++multipleEntries;
-        			outHeaders += "\""+entry.getKey()+"\":\""+entry.getValue().toString()+"\"";
-        		}
-        		
-        		if (entry.getValue() instanceof HashMap) {
-        			if (multipleEntries > 0) outHeaders += ","; else outHeaders = "{";
-        			++multipleEntries;
-        			outHeaders += "\""+entry.getKey()+"\":"
-        					+wtr.write(entry.getValue().toString());
-        		}
-        		
-        		if (entry.getValue() instanceof ArrayList) {
-        			if (multipleEntries > 0) outHeaders += ","; else outHeaders = "{";
-        			++multipleEntries;
-        			outHeaders += "\""+entry.getKey()+"\":"
-        					+wtr.write(entry.getValue().toString());
-        		}
-       	}
-        	outHeaders += "}";
-        }
+        JSONWriter wtr = new JSONWriter();
+        String headers = wtr.write(props.getHeaders());
         
         /*
          * next we need to define the "timestamp"-string
@@ -607,7 +615,7 @@ public class rmq {
         resultMap.put("correlationId", props.getCorrelationId());
         if (props.getDeliveryMode() != null) resultMap.put("deliveryMode", Integer.toString(props.getDeliveryMode()));
         resultMap.put("expiration", props.getExpiration());
-        resultMap.put("headers", outHeaders);
+        resultMap.put("headers", headers);
         resultMap.put("messageId", props.getMessageId());
         if (props.getPriority() != null) resultMap.put("priority", props.getPriority().toString());
         resultMap.put("replyTo", props.getReplyTo());
@@ -2027,56 +2035,144 @@ public class rmq {
     			AMQP.BasicProperties properties,
     			byte[] body) throws IOException {
     		Channel channel = getChannel();
-    		String user = getUser();
-    		String pass = getPass();
+    		String ooUser = getOOUser();
+    		String ooPass = getOOPass();
     		String flow = getFlow();
     		String runName = getRunName();
-    		String ooHost = getHost();
-    		Integer ooPort = getPort();
+    		String ooHost = getOOHost();
+    		Integer ooPort = getOOPort();
+    		String mqHost = getMQHost();
+    		String mqPort = getMQPort();
+    		String mqUser = getMQUser();
+    		String mqPass = getMQPass();
+    		String virtualHost = getVirtualHost();
+    		String queueName = getQueueName();
+    		String corrId;
     		RestApi rest = new RestApi();
-    		    		
-    		/*
-			 * as a kind of housekeeping we purge all channels from the channelMap
-			 * that still have an entry but the connection is already closed in
-			 * RabbitMQ.
-			 */
-			purgeChannelMap();
-			
+    		ArrayList<GetResponse> mesgList = new ArrayList<GetResponse>();
+    		Map<String,Object> flowInput = new HashMap<String,Object>();
+    		JSONReader rdr = new JSONReader();
+    		JSONWriter wtr = new JSONWriter();
+    		
+    		/* 
+    		 * get all mandatory input fields for a flow
+    		 */
+    		Map<String,Boolean> flowInputMap = rest.getFlowInputMap(ooHost, ooPort.toString(),
+    				ooUser, ooPass, flow, true);     		
+    	
     		/*
     		 * when the runName is not given we set it to the conumerTag
     		 */
-    		if (runName.isEmpty()) runName = consumerTag;
+    		if (runName.isEmpty()) runName = rest.getFlowName(ooHost, ooPort.toString(), 
+    				ooUser,ooPass, flow) + ": received a message";
+    		
+    		/*
+    		 * get the correlation id to find messages for the same flow
+    		 */
+    		corrId = properties.getCorrelationId();
+    		if (corrId == null) corrId = ""; 
     		
     		String inputs = "{}";
     		
-    		if (properties.getHeaders().get("inputs") != null) {
-    			inputs = properties.getHeaders().get("inputs").toString();
-			} else {
-    			inputs = new String(body, "UTF-8");
+    		/* if no inputs are given but needed then we can stop here */
+    		if (properties.getHeaders() == null && flowInputMap.size() > 0) {
+    			return;
     		}
+    		
+    		/*
+    		 * put the OO flow input fiels on a stack.
+    		 * before we call the flow we will use JSONWriter to
+    		 * build a json string from this stack.
+    		 */
+    		Map<String,Object> headers = new HashMap<String,Object>();
+    		if (properties.getHeaders() != null) {
+    			headers = properties.getHeaders();
+    			Map<String,Object> jHeader = new HashMap<String,Object>();
+        	
+    			jHeader = (Map<String, Object>) rdr.read(headers.get("flowInput").toString());
+    			for (Map.Entry<String,Object> entry:jHeader.entrySet()) {
+    				flowInput.put(entry.getKey(), entry.getValue());
+    			}
+    			
+    		}
+    		
+    		System.out.println("inputs 1: "+flowInput.toString());
+    		   		
+    		mesgList = getMessagesByCorrId(mqHost, mqPort, mqUser, mqPass, virtualHost, queueName, corrId);
+    		
+    		for (int index=0; mesgList != null && index<mesgList.size(); index++) {
+    			if (mesgList.get(index).getProps().getHeaders() != null) {
+        			headers = mesgList.get(index).getProps().getHeaders();
+        			Map<String,Object> jHeader = new HashMap<String,Object>();
+            		
+        			jHeader = (Map<String, Object>) rdr.read(headers.get("flowInput").toString());
+        			for (Map.Entry<String,Object> entry:jHeader.entrySet()) {
+        				flowInput.put(entry.getKey(), entry.getValue());
+        			}
+        		}
+    		}
+    		
+    		System.out.println("inputs 2: "+flowInput.toString());
+    		
+    		/* add correlation ID, if not present */
+    		if (flowInput.get("correlationId") == null) {
+    			flowInput.put("correlationId", corrId);
+    		}
+    		
+    		/*
+    		 * check that we have met all requirements to start the flow.
+    		 * this means we need to check that all required inputs are provided.
+    		 * so we count the inputs that equal the required once.
+    		 * if the count matches the size of the flowInputMap than we have all
+    		 * required fields. 
+    		 */
+    		int mapCount = 0;
+    		for (Map.Entry<String,Boolean> item : flowInputMap.entrySet()) {
+    			Object value = flowInput.get(item.getKey());
+    			if (value != null) ++mapCount;
+    		}
+    		Boolean flowInputsOkay = mapCount == flowInputMap.size();
+    		
+    		inputs = wtr.write(flowInput);
+    		if (flowInputsOkay) System.out.println("input: "+inputs);
     		
     		String postLink = "https://"+ooHost+":"+ooPort.toString()+"/oo/rest/executions/";
     		String postRequest = "{\"uuid\":\""+flow+"\",\"runName\":\""+runName+"\","+
     				"\"logLevel\":\"INFO\",\"inputs\":"+inputs+"}";
     		
-    		try {
-    			rest.httpPost(postLink, user, pass, postRequest);
+    		if (flowInputsOkay) try {
+    			rest.httpPost(postLink, ooUser, ooPass, postRequest);
+    			channel.basicAck(envelope.getDeliveryTag(), false);
     		} catch (Exception e) {
-    			System.err.println("could not start flow");
+    			// System.err.println("could not start flow");
+    			try {
+    				channel.basicNack(envelope.getDeliveryTag(), false, false);
+    				for (int index=0; index<mesgList.size(); index++) {
+    					channel.basicAck(mesgList.get(index).getEnvelope().getDeliveryTag(), false);
+    				}
+    					
+    			} catch (Exception f) { /* do nothing */ }
+    		} else {
+    			try {
+    				channel.basicNack(envelope.getDeliveryTag(), false, true);
+    				channel.basicRecover(false);
+    			} catch (Exception f) { /* do nothing */ }
     		}
- 
-    		channel.basicAck(envelope.getDeliveryTag(), false);
-  
     	} /* end handleDelivery */
     	}; /* end QConsumer */;
 		
-    	consumer.setHost(ooHost);
-    	consumer.setPort(ooPort);
-    	consumer.setUser(ooUsername);
-    	consumer.setPass(ooPassword);
+    	consumer.setOOHost(ooHost);
+    	consumer.setOOPort(ooPort);
+    	consumer.setOOUser(ooUsername);
+    	consumer.setOOPass(ooPassword);
+    	consumer.setMQHost(mqHost);
+    	consumer.setMQPort(mqPortString);
+    	consumer.setMQUser(username);
+    	consumer.setMQPass(password);
+    	consumer.setVirtualHost(virtualHost);
     	consumer.setFlow(flowUuid);
     	consumer.setRunName(runName);
-    	
+    	consumer.setQueueName(queueName);
     	
     	/* 
     	 * create the consumer HERE

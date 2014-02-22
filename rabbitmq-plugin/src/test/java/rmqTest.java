@@ -2,6 +2,7 @@ import static org.junit.Assert.*;
 
 import java.util.Map;
 import java.util.HashMap;
+import java.util.UUID;
 
 import org.junit.Test;
 
@@ -44,7 +45,7 @@ public class rmqTest {
 		// q.send(message, mqHost, port, user, pass, virtualHost, exchange, queue)
 		sMesg = q.send("myMessage", null, "false", mqHost, mqPortString, username, password, virtualHost, exchange, queueName,
 				"", "", "", "text/plain", "", "", "", 
-				"{\"h1\":13, \"h2\": \"MeinText\", \"h3\":true,\"h4\":[1, 2, 3]}", 
+				"{\"h1\":13, \"h2\": \"MeinText\", \"h3\":true}", 
 				"", "", "", "dd.MM.yyyy", "now", "", "");
 		
 		channelId = sMesg.get("channelId");
@@ -232,12 +233,14 @@ public class rmqTest {
 		rmq q = new rmq();
 		Map<String, String> mesg = new HashMap<String, String>();
 		String channelId = "";
+		// String flowUuid = "388f4cfa-62ca-46a3-bf03-9ab0561878de";
 		String flowUuid = "55acde5e-a562-43d9-a3c9-d325d8b98621";
-		String runName = "Junit Test";
+		String runName = "";
 		String ooHost = "oo10.fritz.box";
 		String ooPortString = "8443";
 		String ooUsername = "admin";
 		String ooPassword = "admin";
+		String queueName = "secondQueue";
 		
 		mesg = q.createConsumer(null, mqHost, mqPortString, username, password, 
 					virtualHost, queueName, flowUuid, runName, ooHost, ooPortString, 
@@ -246,12 +249,25 @@ public class rmqTest {
 		
 		channelId = mesg.get("channelId");
 		
-		mesg = q.send("myMessage", channelId, "false", mqHost, mqPortString, username, password, virtualHost, exchange, queueName,
-				"", "", "", "text/plain", "", "", "", 
-				"{\"inputs\":{\"password\": \"Test1234\"}}", 
+		UUID corrId = UUID.randomUUID();
+		
+		System.out.println("Start: "+corrId.toString());
+		
+		mesg = q.send("Message one", channelId, "false", mqHost, mqPortString, username, password, virtualHost, exchange, queueName,
+				"", "", "", "text/plain", corrId.toString(), "", "", 
+				"{\"flowInput\":{\"message\": \"Mesg 1\"}}", 
 				"", "", "", "dd.MM.yyyy", "now", "", "");
 		
-		sleep(5);
+		sleep(1);
+
+		mesg = q.send("Message two", channelId, "false", mqHost, mqPortString, username, password, virtualHost, exchange, queueName,
+				"", "", "", "text/plain", corrId.toString(), "", "", 
+				"{\"flowInput\":{\"noop\":\"Mesg 2\"}}", 
+				"", "", "", "dd.MM.yyyy", "now", "", "");
+		
+		sleep(2);
+		
+		System.out.println("Stop");
 		
 		q.closeChannel(channelId);
 	}

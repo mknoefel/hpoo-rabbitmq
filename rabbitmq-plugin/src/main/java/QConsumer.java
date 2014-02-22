@@ -14,20 +14,26 @@ public class QConsumer extends DefaultConsumer {
 	private String ooRunName = "";
 	private String ooHost = "localhost";
 	private Integer ooPort = 8443;
+	private String mqHost = "";
+	private Integer mqPort = 8443;
+	private String mqUser = "";
+	private String mqPass = "";
+	private String virtualHost = "";
+	private String queueName = "";
 	
-	public void setUser(String user) {
+	public void setOOUser(String user) {
 		this.ooUser = user;
 	}
 	
-	public String getUser() {
+	public String getOOUser() {
 		return this.ooUser;
 	}
 	
-	public void setPass(String pass) {
+	public void setOOPass(String pass) {
 		this.ooPass = pass;
 	}
 	
-	public String getPass() {
+	public String getOOPass() {
 		return this.ooPass;
 	}
 	
@@ -47,20 +53,78 @@ public class QConsumer extends DefaultConsumer {
 		return this.ooRunName;
 	}
 	
-	public void setHost(String host) {
+	public void setOOHost(String host) {
 		this.ooHost = host;
 	}
 	
-	public String getHost() {
+	public String getOOHost() {
 		return this.ooHost;
 	}
 	
-	public void setPort(Integer port) {
+	public void setOOPort(Integer port) {
 		this.ooPort = port;
 	}
 	
-	public Integer getPort() {
+	public void setOOPort(String port) {
+		try {
+			this.ooPort = Integer.parseInt(port);
+		} catch (Exception e) { /* do nothing */ }
+	}
+	
+	public Integer getOOPort() {
 		return this.ooPort;
 	}
 	
+	public void setMQHost(String host) {
+		this.mqHost = host;
+	}
+	
+	public String getMQHost() {
+		return this.mqHost;
+	}
+	
+	public void setMQPort(Integer port) {
+		this.mqPort = port;
+	}
+	
+	public void setMQPort(String port) {
+		try {
+			this.mqPort = Integer.parseInt(port);
+		} catch (Exception e) { /* do nothing */ }
+	}
+	
+	public String getMQPort() {
+		return this.mqPort.toString();
+	}
+	
+	public void setMQUser(String user) {
+		this.mqUser = user;
+	}
+	
+	public String getMQUser() {
+		return this.mqUser;
+	}
+	
+	public void setMQPass(String pass) {
+		this.mqPass = pass;
+	}
+	
+	public String getMQPass() {
+		return this.mqPass;
+	}
+	
+	public void setVirtualHost(String vhost) {
+		this.virtualHost = vhost;;
+	}
+	
+	public String getVirtualHost() {
+		return this.virtualHost;
+	}
+	public void setQueueName(String queue) {
+		this.queueName = queue;
+	}
+	
+	public String getQueueName() {
+		return this.queueName;
+	}
 }
