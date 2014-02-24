@@ -147,22 +147,8 @@ public class rmq {
 			}
 			
 			/* we can exit when there are no more messages */
-			if (resp == null) return mesgs;
-			
-			try {
-				channel.basicNack(resp.getEnvelope().getDeliveryTag(), false, true);
-				System.out.println("found mesg: "+new String(resp.getBody(), "UTF-8"));
-				
-				mCount = resp.getMessageCount();
-			} catch (Exception e) { 
-				System.out.println("basicNack: "+e.getMessage());
-				mCount = 0;
-			}
-			
-			if (resp.getProps().getCorrelationId().equals(corrId)) {
-				mesgs.add(resp);
-				System.out.println("Adding mesg:");
-			}
+			if (resp == null) mCount = 0;
+			else mCount = resp.getMessageCount();
 			
 		} while (mCount > 0);
 
@@ -2054,11 +2040,13 @@ public class rmq {
     		JSONReader rdr = new JSONReader();
     		JSONWriter wtr = new JSONWriter();
     		
+    		System.out.println("handleDelivery: "+runName);
+    		
     		/* 
     		 * get all mandatory input fields for a flow
     		 */
-    		Map<String,Boolean> flowInputMap = rest.getFlowInputMap(ooHost, ooPort.toString(),
-    				ooUser, ooPass, flow, true);     		
+    		Map<String,Boolean> flowInputMap = 
+    				rest.getFlowInputMap(ooHost, ooPort.toString(), ooUser, ooPass, flow, true);	
     	
     		/*
     		 * when the runName is not given we set it to the conumerTag
@@ -2070,14 +2058,7 @@ public class rmq {
     		 * get the correlation id to find messages for the same flow
     		 */
     		corrId = properties.getCorrelationId();
-    		if (corrId == null) corrId = ""; 
-    		
-    		String inputs = "{}";
-    		
-    		/* if no inputs are given but needed then we can stop here */
-    		if (properties.getHeaders() == null && flowInputMap.size() > 0) {
-    			return;
-    		}
+    		if (corrId == null) corrId = "please add a correlation ID"; 
     		
     		/*
     		 * put the OO flow input fiels on a stack.
@@ -2098,26 +2079,39 @@ public class rmq {
     		
     		System.out.println("inputs 1: "+flowInput.toString());
     		   		
-    		mesgList = getMessagesByCorrId(mqHost, mqPort, mqUser, mqPass, virtualHost, queueName, corrId);
-    		
-    		for (int index=0; mesgList != null && index<mesgList.size(); index++) {
-    			if (mesgList.get(index).getProps().getHeaders() != null) {
-        			headers = mesgList.get(index).getProps().getHeaders();
-        			Map<String,Object> jHeader = new HashMap<String,Object>();
-            		
-        			jHeader = (Map<String, Object>) rdr.read(headers.get("flowInput").toString());
-        			for (Map.Entry<String,Object> entry:jHeader.entrySet()) {
-        				flowInput.put(entry.getKey(), entry.getValue());
-        			}
-        		}
+    		/*
+    		 * when we do not have all input fields we try to get them
+    		 * from messages already sent and still unacked in the queue
+    		 */
+    		int mapCount = 0;
+    		for (Map.Entry<String,Boolean> item : flowInputMap.entrySet()) {
+    			Object value = flowInput.get(item.getKey());
+    			if (value != null) ++mapCount;
     		}
     		
+    		/* 
+    		 * when mapCount equals flowInput.Size then we already have all 
+    		 * required input fields.
+    		 */
+    		if (mapCount < flowInput.size()) {
+    			mesgList = getMessagesByCorrId(mqHost, mqPort, mqUser, mqPass, virtualHost, queueName, corrId);
+    		
+    			for (int index=0; mesgList != null && index<mesgList.size(); index++) {
+    				if (mesgList.get(index).getProps().getHeaders() != null) {
+    					headers = mesgList.get(index).getProps().getHeaders();
+    					Map<String,Object> jHeader = new HashMap<String,Object>();
+            		
+    					jHeader = (Map<String, Object>) rdr.read(headers.get("flowInput").toString());
+    					for (Map.Entry<String,Object> entry:jHeader.entrySet()) {
+    						flowInput.put(entry.getKey(), entry.getValue());
+    					}
+    				}
+    			}
+    		}
     		System.out.println("inputs 2: "+flowInput.toString());
     		
-    		/* add correlation ID, if not present */
-    		if (flowInput.get("correlationId") == null) {
-    			flowInput.put("correlationId", corrId);
-    		}
+    		/* add or override correlation ID */
+    		flowInput.put("correlationId", corrId);
     		
     		/*
     		 * check that we have met all requirements to start the flow.
@@ -2126,21 +2120,24 @@ public class rmq {
     		 * if the count matches the size of the flowInputMap than we have all
     		 * required fields. 
     		 */
-    		int mapCount = 0;
+    		mapCount = 0;
     		for (Map.Entry<String,Boolean> item : flowInputMap.entrySet()) {
     			Object value = flowInput.get(item.getKey());
     			if (value != null) ++mapCount;
     		}
     		Boolean flowInputsOkay = mapCount == flowInputMap.size();
     		
-    		inputs = wtr.write(flowInput);
+    		String inputs = wtr.write(flowInput);
     		if (flowInputsOkay) System.out.println("input: "+inputs);
     		
     		String postLink = "https://"+ooHost+":"+ooPort.toString()+"/oo/rest/executions/";
     		String postRequest = "{\"uuid\":\""+flow+"\",\"runName\":\""+runName+"\","+
     				"\"logLevel\":\"INFO\",\"inputs\":"+inputs+"}";
     		
+    		System.out.println("Input: "+inputs);
+    		
     		if (flowInputsOkay) try {
+    			System.out.println("Posting: "+postRequest);
     			rest.httpPost(postLink, ooUser, ooPass, postRequest);
     			channel.basicAck(envelope.getDeliveryTag(), false);
     		} catch (Exception e) {

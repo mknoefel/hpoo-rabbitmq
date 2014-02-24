@@ -235,7 +235,7 @@ public class rmqTest {
 		String channelId = "";
 		// String flowUuid = "388f4cfa-62ca-46a3-bf03-9ab0561878de";
 		String flowUuid = "55acde5e-a562-43d9-a3c9-d325d8b98621";
-		String runName = "";
+		String runName = "test";
 		String ooHost = "oo10.fritz.box";
 		String ooPortString = "8443";
 		String ooUsername = "admin";
@@ -253,19 +253,25 @@ public class rmqTest {
 		
 		System.out.println("Start: "+corrId.toString());
 		
+		if (!q.getChannel(channelId).isOpen()) System.out.println("channel already closed");
+		
 		mesg = q.send("Message one", channelId, "false", mqHost, mqPortString, username, password, virtualHost, exchange, queueName,
 				"", "", "", "text/plain", corrId.toString(), "", "", 
 				"{\"flowInput\":{\"message\": \"Mesg 1\"}}", 
 				"", "", "", "dd.MM.yyyy", "now", "", "");
+		System.out.println("Mesg 1: "+mesg.get("resultMessage"));
 		
 		sleep(1);
 
+		if (!q.getChannel(channelId).isOpen()) System.out.println("channel already closed");
+		
 		mesg = q.send("Message two", channelId, "false", mqHost, mqPortString, username, password, virtualHost, exchange, queueName,
 				"", "", "", "text/plain", corrId.toString(), "", "", 
 				"{\"flowInput\":{\"noop\":\"Mesg 2\"}}", 
 				"", "", "", "dd.MM.yyyy", "now", "", "");
+		System.out.println("Mesg 2: "+mesg.get("resultMessage"));
 		
-		sleep(2);
+		sleep(10);
 		
 		System.out.println("Stop");
 		
